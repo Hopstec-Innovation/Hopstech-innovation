@@ -6,9 +6,10 @@ import AboutSection from '../components/enterprise/AboutSection';
 import CircuitDivider from '../components/enterprise/CircuitDivider';
 import ProductsSpotlightSection from '../components/enterprise/ProductsSpotlightSection';
 import ServicesSection from '../components/enterprise/ServicesSection';
-import TechStackSection from '../components/enterprise/TechStackSection';
 import CaseStudiesSection from '../components/enterprise/CaseStudiesSection';
 import TestimonialsSection from '../components/enterprise/TestimonialsSection';
+import CraftChapterIntro from '../components/enterprise/CraftChapterIntro';
+import TechStackSection from '../components/enterprise/TechStackSection';
 import HowWeShipSection from '../components/enterprise/HowWeShipSection';
 import ClientVisibilitySection from '../components/enterprise/ClientVisibilitySection';
 import FounderSection from '../components/enterprise/FounderSection';
@@ -35,9 +36,10 @@ const HomePage = () => {
       <ProductsSpotlightSection />
       <ServicesSection />
       <CircuitDivider />
-      <TechStackSection />
       <CaseStudiesSection />
       <TestimonialsSection />
+      <CraftChapterIntro />
+      <TechStackSection />
       <HowWeShipSection />
       <CircuitDivider />
       <ClientVisibilitySection />

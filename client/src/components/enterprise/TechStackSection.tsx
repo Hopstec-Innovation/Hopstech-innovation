@@ -16,11 +16,14 @@ const categories = [
 
 const TechStackSection = () => {
   return (
-    <section id="tech-stack" className="border-y border-white/5 bg-slate-900/30 py-24 md:py-32">
+    <section id="tech-stack" className="bg-slate-900/30 pb-20 pt-12 md:pb-28 md:pt-16">
       <div className="container mx-auto px-4">
         <FadeIn className="mb-12 text-center">
           <div className="mb-4 flex items-center justify-center gap-2">
-            <Sparkles className="h-7 w-7 text-[var(--hopstec-teal)]" />
+            <Sparkles className="h-5 w-5 text-[var(--hopstec-teal)]" />
+            <p className="text-xs font-medium uppercase tracking-[0.24em] text-[var(--hopstec-teal)]">
+              {enterpriseTechStack.kicker}
+            </p>
           </div>
           <h2 className="mb-4 text-3xl font-bold text-white md:text-4xl">
             {enterpriseTechStack.title}

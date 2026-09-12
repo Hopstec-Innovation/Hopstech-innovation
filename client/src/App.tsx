@@ -1,15 +1,13 @@
 import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Route, Switch } from "wouter";
+import { Redirect, Route, Switch } from "wouter";
 import AnalyticsScript from "./components/AnalyticsScript";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { ScrollProgress } from "./components/animations/ScrollProgress";
 
 const HomePage = lazy(() => import("./pages/HomePage"));
-const PortfolioPage = lazy(() => import("./pages/PortfolioPage"));
-const ProjectDetailPage = lazy(() => import("./pages/ProjectDetailPage"));
 const ContactPage = lazy(() => import("./pages/ContactPage"));
 const CareersPage = lazy(() => import("./pages/CareersPage"));
 const AquaPulsePage = lazy(() => import("./pages/AquaPulsePage"));
@@ -37,8 +35,8 @@ function Router() {
     <Switch>
       <Route path={"/"}>{() => <HomePage />}</Route>
       <Route path={"/aquapulse"}>{() => <AquaPulsePage />}</Route>
-      <Route path={"/portfolio"}>{() => <PortfolioPage />}</Route>
-      <Route path={"/portfolio/:slug"}>{() => <ProjectDetailPage />}</Route>
+      <Route path={"/portfolio"}>{() => <Redirect to="/" />}</Route>
+      <Route path={"/portfolio/:slug"}>{() => <Redirect to="/" />}</Route>
       <Route path={"/contact"}>{() => <ContactPage />}</Route>
       <Route path={"/careers"}>{() => <CareersPage />}</Route>
       <Route path={"/client-portal/projects/:id"}>{() => <ClientProjectDetailPage />}</Route>

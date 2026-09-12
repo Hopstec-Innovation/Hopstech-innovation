@@ -7,9 +7,15 @@ import { enterpriseHowWeShip } from "@/content/enterprise";
 
 const HowWeShipSection = () => {
   return (
-    <section id="how-we-ship" className="border-t border-white/5 bg-slate-900/30 py-24 md:py-32">
+    <section
+      id="how-we-ship"
+      className="border-t border-white/5 bg-slate-900/30 pb-24 pt-20 md:pb-32 md:pt-24"
+    >
       <div className="container mx-auto px-4">
         <FadeIn className="mx-auto mb-12 max-w-3xl text-center">
+          <p className="mb-3 text-xs font-medium uppercase tracking-[0.24em] text-[var(--hopstec-teal)]">
+            {enterpriseHowWeShip.kicker}
+          </p>
           <h2 className="mb-4 text-3xl font-bold text-white md:text-4xl">
             {enterpriseHowWeShip.title}
           </h2>

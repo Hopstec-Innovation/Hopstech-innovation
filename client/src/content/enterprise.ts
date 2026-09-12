@@ -66,7 +66,15 @@ export const enterpriseProducts = {
   ],
 };
 
+export const enterpriseCraft = {
+  kicker: "Savoir-faire",
+  title: "The craft behind the work",
+  intro:
+    "Interactive models of how we choose technology and how we deliver — the same discipline that shapes every engagement above.",
+};
+
 export const enterpriseTechStack = {
+  kicker: "Stack",
   title: "Technologies we ship with",
   intro:
     "Production-grade stacks across web, mobile, infrastructure, and connected devices — chosen for reliability, not trends.",
@@ -445,11 +453,13 @@ export const enterpriseSectionNav = [
   { id: "products", label: "Products" },
   { id: "services", label: "Services" },
   { id: "case-studies", label: "Work" },
+  { id: "craft", label: "Craft" },
   { id: "how-we-ship", label: "Process" },
   { id: "contact", label: "Contact", href: "/contact" },
 ] as const;
 
 export const enterpriseHowWeShip = {
+  kicker: "Delivery",
   title: "How we ship",
   intro:
     "Every engagement follows a disciplined delivery model, from discovery and architecture through automated testing, staging, and production deployment. Your team inherits systems they can own.",
@@ -512,7 +522,7 @@ export const enterpriseFooter = {
   companyLinks: [
     { label: "About", href: "/#about" },
     { label: "Services", href: "/#services" },
-    { label: "How we ship", href: "/#how-we-ship" },
+    { label: "Savoir-faire", href: "/#craft" },
     { label: "Careers", href: "/careers" },
   ],
   workLinks: [
