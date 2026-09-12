@@ -407,14 +407,39 @@ export const enterpriseCta = {
   href: "/contact",
 };
 
+export const enterpriseContact = {
+  kicker: "Contact",
+  title: "Start a conversation",
+  intro:
+    "Have a product, platform, or automation challenge? Share the scope — we typically respond within one business day.",
+  infoTitle: "Direct lines",
+  infoIntro: "Prefer email or a call? Reach the team here.",
+  emailLabel: "Email",
+  phoneLabel: "Phone",
+  hqLabel: "Headquarters",
+  responseTitle: "Response time",
+  responseBody:
+    "Business inquiries are answered within one business day on working days.",
+  formTitle: "Tell us about the work",
+  formIntro:
+    "Scope, timeline, and goals are enough to start. We will follow up with next steps.",
+  successTitle: "Message received",
+  successBody:
+    "Thank you for reaching out. Our team will get back to you shortly.",
+  successCta: "Send another message",
+  submitLabel: "Send message",
+  submittingLabel: "Sending…",
+  phonePlaceholder: "+33 6 00 00 00 00",
+};
+
 export const enterpriseCareers = {
-  title: "Careers",
-  headline: "Build software that ships in the real world",
+  kicker: "Careers",
+  title: "Build software that ships in the real world",
   intro:
     "Hopstec Innovation is a Paris-based team building custom platforms, connected products, and regulated HealthTech systems. We hire people who care about craft, accountability, and outcomes — not slide decks.",
-  pathsTitle: "Career paths",
+  pathsTitle: "Where you can grow",
   pathsIntro:
-    "We grow engineers across the stacks and domains we deliver for clients every day.",
+    "We develop engineers across the stacks and domains we deliver for clients every day.",
   paths: [
     {
       title: "Full-Stack Engineering",
@@ -445,7 +470,7 @@ export const enterpriseCareers = {
   cta: "Send your profile",
   ctaHref: "/contact",
   ctaHint:
-    "Include your GitHub, LinkedIn, or portfolio and the path that interests you most.",
+    "Include your GitHub, LinkedIn, or recent work samples and the path that interests you most.",
 };
 
 export const enterpriseSectionNav = [
