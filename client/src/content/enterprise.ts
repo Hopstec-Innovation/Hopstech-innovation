@@ -527,11 +527,6 @@ export const enterpriseFooter = {
   ],
   socialLinks: [
     {
-      label: "GitHub",
-      href: "https://github.com/hopstech",
-      network: "github" as const,
-    },
-    {
       label: "LinkedIn",
       href: "https://linkedin.com/in/herve-kajingu",
       network: "linkedin" as const,
