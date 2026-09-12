@@ -2,9 +2,9 @@ import { Link } from "wouter";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { BrandLogo } from "@/components/BrandLogo";
 import { FadeIn } from "@/components/animations/FadeIn";
 import { enterpriseHero } from "@/content/enterprise";
+import { COMPANY_NAME } from "@shared/const";
 import { handleSectionLink } from "@/lib/scrollToSection";
 
 const HeroSection = () => {
@@ -23,9 +23,9 @@ const HeroSection = () => {
 
       <div className="container relative z-10 mx-auto px-4">
         <FadeIn className="mx-auto max-w-4xl text-center">
-          <div className="mb-8 flex justify-center">
-            <BrandLogo size="hero" className="shadow-2xl" />
-          </div>
+          <p className="mb-5 text-sm font-medium tracking-[0.22em] text-[var(--hopstec-teal)] uppercase md:text-base">
+            {COMPANY_NAME}
+          </p>
           <div className="mb-6 inline-block">
             <Badge
               variant="outline"
@@ -82,7 +82,9 @@ const HeroSection = () => {
       </div>
 
       <div className="absolute bottom-8 left-1/2 flex -translate-x-1/2 flex-col items-center gap-2">
-        <span className="text-xs uppercase tracking-[0.2em] text-gray-500">Scroll to explore</span>
+        <span className="text-xs uppercase tracking-[0.2em] text-gray-500">
+          Scroll to explore
+        </span>
         <div className="animate-bounce">
           <div className="flex h-10 w-6 justify-center rounded-full border-2 border-[var(--hopstec-teal)]/40">
             <div className="mt-2 h-3 w-1 rounded-full bg-[var(--hopstec-teal)]/60" />

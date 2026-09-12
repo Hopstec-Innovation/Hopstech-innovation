@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { ArrowUpRight, Github, Linkedin } from "lucide-react";
+import { ArrowUpRight, Linkedin } from "lucide-react";
 import { BrandLogo } from "./BrandLogo";
 import { enterpriseFooter } from "@/content/enterprise";
 import { handleSectionLink } from "@/lib/scrollToSection";
@@ -128,11 +128,9 @@ const Footer = () => {
                 rel="noopener noreferrer"
                 aria-label={link.label}
               >
-                {link.network === "github" ? (
-                  <Github className="h-4 w-4" />
-                ) : (
+                {link.network === "linkedin" ? (
                   <Linkedin className="h-4 w-4" />
-                )}
+                ) : null}
               </a>
             ))}
           </div>
