@@ -1,12 +1,10 @@
-import { Link } from 'wouter';
-import { Github, Linkedin } from 'lucide-react';
-import { BrandLogo } from './BrandLogo';
-import { enterpriseFooter } from '@/content/enterprise';
-import { handleSectionLink } from '@/lib/scrollToSection';
-import frenchTechGrandParisLogo from '@/assets/Logo_FT_GrandParis_FondBlanc.png';
-
-const FRENCH_TECH_GRAND_PARIS_URL =
-  'https://www.frenchtech-grandparis.com';
+import { Link } from "wouter";
+import { ArrowUpRight, Github, Linkedin } from "lucide-react";
+import { BrandLogo } from "./BrandLogo";
+import { enterpriseFooter } from "@/content/enterprise";
+import { handleSectionLink } from "@/lib/scrollToSection";
+import frenchTechGrandParisLogo from "@/assets/Logo_FT_GrandParis_FondBlanc.png";
+import "./enterprise/footer.css";
 
 const Footer = () => {
   const currentYear = new Date().getFullYear();
@@ -20,113 +18,123 @@ const Footer = () => {
     }
   };
 
+  const renderLink = (link: {
+    label: string;
+    href: string;
+    external?: boolean;
+  }) => {
+    if (link.external || link.href.startsWith("http")) {
+      return (
+        <a href={link.href} target="_blank" rel="noopener noreferrer">
+          {link.label}
+          <ArrowUpRight className="h-3.5 w-3.5 opacity-60" />
+        </a>
+      );
+    }
+
+    if (link.href.startsWith("/#")) {
+      return (
+        <a href={link.href} onClick={(event) => handleNavClick(event, link.href)}>
+          {link.label}
+        </a>
+      );
+    }
+
+    return (
+      <Link href={link.href}>
+        <a>{link.label}</a>
+      </Link>
+    );
+  };
+
   return (
-    <footer
-      className="border-t border-slate-800 text-gray-300"
-      style={{ backgroundColor: 'var(--hopstec-footer-bg)' }}
-    >
-      <div className="container mx-auto px-4 py-12">
-        <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
-          <div className="space-y-4">
+    <footer className="site-footer">
+      <div className="site-footer-inner">
+        <div className="site-footer-top">
+          <div className="site-footer-brand">
             <Link href="/">
-              <a className="flex items-center space-x-3 text-white transition-all hover:opacity-90">
+              <a className="site-footer-brand-link">
                 <BrandLogo size="md" showRing={false} />
-                <span className="text-xl font-bold text-white">
+                <span className="site-footer-brand-name">
                   {enterpriseFooter.companyName}
                 </span>
               </a>
             </Link>
-            <div className="space-y-2 text-sm text-gray-400">
-              <p>{enterpriseFooter.address}</p>
-              <p>
-                <a
-                  href={enterpriseFooter.websiteUrl}
-                  className="transition-colors hover:text-[var(--hopstec-teal)]"
-                >
-                  {enterpriseFooter.website}
-                </a>
-              </p>
-              <p>
-                <a
-                  href={`mailto:${enterpriseFooter.email}`}
-                  className="transition-colors hover:text-[var(--hopstec-teal)]"
-                >
-                  {enterpriseFooter.email}
-                </a>
-              </p>
+            <p className="site-footer-tagline">{enterpriseFooter.tagline}</p>
+            <div className="site-footer-contact">
+              <span>{enterpriseFooter.address}</span>
+              <a href={`mailto:${enterpriseFooter.email}`}>
+                {enterpriseFooter.email}
+              </a>
+              <a href={enterpriseFooter.phoneHref}>{enterpriseFooter.phone}</a>
             </div>
           </div>
 
           <div>
-            <h3 className="mb-4 font-semibold text-white">Navigation</h3>
-            <ul className="space-y-2">
-              {enterpriseFooter.navLinks.map((link) => (
-                <li key={link.label}>
-                  {link.href.startsWith('/#') ? (
-                    <a
-                      href={link.href}
-                      onClick={(event) => handleNavClick(event, link.href)}
-                      className="text-sm transition-colors hover:text-[var(--hopstec-teal)]"
-                    >
-                      {link.label}
-                    </a>
-                  ) : (
-                    <Link href={link.href}>
-                      <a className="text-sm transition-colors hover:text-[var(--hopstec-teal)]">
-                        {link.label}
-                      </a>
-                    </Link>
-                  )}
-                </li>
+            <h3 className="site-footer-col-title">Company</h3>
+            <ul className="site-footer-list">
+              {enterpriseFooter.companyLinks.map((link) => (
+                <li key={link.label}>{renderLink(link)}</li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <h3 className="site-footer-col-title">Work</h3>
+            <ul className="site-footer-list">
+              {enterpriseFooter.workLinks.map((link) => (
+                <li key={link.label}>{renderLink(link)}</li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <h3 className="site-footer-col-title">Clients</h3>
+            <ul className="site-footer-list">
+              {enterpriseFooter.clientLinks.map((link) => (
+                <li key={link.label}>{renderLink(link)}</li>
               ))}
             </ul>
           </div>
         </div>
 
-        <div className="mt-8 border-t border-slate-800 pt-8">
+        <div className="site-footer-trust">
           <a
-            href={FRENCH_TECH_GRAND_PARIS_URL}
+            href={enterpriseFooter.frenchTech.href}
             target="_blank"
             rel="noopener noreferrer"
-            className="mx-auto mb-8 flex w-fit flex-col items-center gap-2 text-center text-xs text-gray-400 transition-opacity hover:opacity-90"
-            aria-label="La French Tech Grand Paris"
+            className="site-footer-french-tech"
+            aria-label={enterpriseFooter.frenchTech.label}
           >
             <img
               src={frenchTechGrandParisLogo}
               alt="La French Tech Grand Paris"
-              height={128}
-              className="h-32 w-auto"
             />
-            <span>Member of La French Tech Grand Paris</span>
+            <span>{enterpriseFooter.frenchTech.label}</span>
           </a>
+          <p className="site-footer-trust-line">{enterpriseFooter.trustLine}</p>
+        </div>
 
-          <div className="flex flex-col items-center justify-between gap-4 text-sm text-gray-400 sm:flex-row">
-            <div className="text-center sm:text-left">
-              <p>
-                © {currentYear} {enterpriseFooter.companyName}. All rights reserved.
-              </p>
-              <p className="mt-1 text-xs text-gray-500">{enterpriseFooter.trustLine}</p>
-            </div>
-            <div className="flex space-x-4">
+        <div className="site-footer-bottom">
+          <p className="site-footer-copy">
+            © {currentYear} {enterpriseFooter.companyName}. All rights reserved.
+          </p>
+          <div className="site-footer-social">
+            {enterpriseFooter.socialLinks.map((link) => (
               <a
-                href="https://github.com/hopstech"
+                key={link.label}
+                href={link.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="transition-colors hover:text-[var(--hopstec-teal)]"
-                aria-label="GitHub"
+                aria-label={link.label}
               >
-                <Github className="h-5 w-5" />
+                {link.network === "github" ? (
+                  <Github className="h-4 w-4" />
+                ) : (
+                  <Linkedin className="h-4 w-4" />
+                )}
               </a>
-              <a
-                href="https://linkedin.com/in/herve-kajingu"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="transition-colors hover:text-[var(--hopstec-teal)]"
-                aria-label="LinkedIn"
-              >
-                <Linkedin className="h-5 w-5" />
-              </a>
-            </div>
+            ))}
           </div>
         </div>
       </div>

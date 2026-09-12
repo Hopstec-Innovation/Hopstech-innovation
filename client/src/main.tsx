@@ -5,7 +5,7 @@ import { httpBatchLink, TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
-import { getLoginUrl } from "./const";
+import { getClientPortalLoginPath, getLoginUrl } from "./const";
 import "./index.css";
 
 const queryClient = new QueryClient();
@@ -18,7 +18,30 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
 
   if (!isUnauthorized) return;
 
-  window.location.href = getLoginUrl();
+  const loginPath = getClientPortalLoginPath();
+  const { pathname, search } = window.location;
+
+  // Already on the magic-link login screen — avoid a redirect loop.
+  if (pathname === loginPath || pathname === "/auth/verify") {
+    return;
+  }
+
+  // Prefer the client portal magic-link flow so clients never hit broken OAuth.
+  const next = getLoginUrl();
+  const returnTo = `${pathname}${search}`;
+  if (next.startsWith("/")) {
+    const target = new URL(next, window.location.origin);
+    if (pathname.startsWith("/client-portal")) {
+      target.searchParams.set("returnTo", returnTo);
+    }
+    if (target.pathname === pathname && target.search === search) {
+      return;
+    }
+    window.location.href = `${target.pathname}${target.search}`;
+    return;
+  }
+
+  window.location.href = next;
 };
 
 queryClient.getQueryCache().subscribe(event => {

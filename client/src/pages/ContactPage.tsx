@@ -99,10 +99,10 @@ const ContactPage = () => {
                     <div>
                       <div className="text-sm text-gray-400 mb-1">Phone</div>
                       <a
-                        href="tel:+33776026688"
+                        href={enterpriseFooter.phoneHref}
                         className="text-white hover:text-[var(--hopstec-teal)] transition-colors"
                       >
-                        +33 7 76 02 66 88
+                        {enterpriseFooter.phone}
                       </a>
                     </div>
                   </div>

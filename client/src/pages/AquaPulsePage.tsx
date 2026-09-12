@@ -759,7 +759,7 @@ const AquaPulsePage = () => {
                         name="phone"
                         value={formData.phone}
                         onChange={handleChange}
-                        placeholder="+33 7 00 00 00 00"
+                        placeholder="+33 6 00 00 00 00"
                         className="border-slate-700 bg-slate-950 text-white"
                       />
                     </div>

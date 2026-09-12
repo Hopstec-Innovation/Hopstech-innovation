@@ -56,7 +56,11 @@ const ClientPortalPage = () => {
       setMagicLinkSent(true);
     },
     onError: (error) => {
-      toast.error(error.message || 'Failed to send magic link. Please try again.');
+      const message =
+        error.message ||
+        "Failed to send magic link. Please try again or contact support.";
+      toast.error(message);
+      setMagicLinkSent(false);
     },
   });
 

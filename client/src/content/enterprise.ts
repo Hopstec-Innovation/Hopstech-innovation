@@ -3,16 +3,11 @@ import {
   COMPANY_ADDRESS,
   COMPANY_EMAIL,
   COMPANY_NAME,
+  COMPANY_PHONE,
+  COMPANY_PHONE_HREF,
   COMPANY_WEBSITE,
 } from "@shared/const";
-import {
-  Brain,
-  Cpu,
-  Globe,
-  HeartPulse,
-  Server,
-  Workflow,
-} from "lucide-react";
+import { Brain, Cpu, Globe, HeartPulse, Server, Workflow } from "lucide-react";
 
 export const enterpriseHero = {
   headlineLine1: "Good software changes how a business operates.",
@@ -22,7 +17,14 @@ export const enterpriseHero = {
   locationTag: "Paris-based. Precision-built.",
   ctaSeeWork: "See our work",
   ctaGetInTouch: "Get in touch",
-  techChips: ["React 19", "Django", "Temporal", "ESP32", "PostgreSQL", "Next.js"],
+  techChips: [
+    "React 19",
+    "Django",
+    "Temporal",
+    "ESP32",
+    "PostgreSQL",
+    "Next.js",
+  ],
 };
 
 export const enterpriseTrustedBy = {
@@ -44,12 +46,12 @@ export const enterpriseProducts = {
       id: "20hecto",
       name: "20Hecto",
       tagline: "Precision metabolic nutrition",
-      status: "Live on Google Play",
+      status: "Live on iOS and Google Play",
       url: "https://app.20hecto.com",
     },
     {
       id: "guardian",
-      name: "Guardian",
+      name: "Hopstec Guardian",
       tagline: "AI threat investigation workspace",
       status: "Live",
       url: "https://hopstechguardian.com",
@@ -75,7 +77,7 @@ export const enterpriseAbout = {
   paragraphs: [
     "Hopstec Innovation was built on a straightforward belief: the right software, built properly, changes what an organisation can do. Not incrementally. Fundamentally.",
     "We are a Paris-based software consultancy specialising in custom web and mobile development, DevOps infrastructure, and operational automation. We work with businesses that need a technical partner who understands both the engineering and the business problem behind it, and who stays accountable from the first line of code to the final deployment.",
-    "Alongside our consultancy work, we build our own products. Our current flagship is 20Hecto, a precision metabolic nutrition platform for people managing endocrine and metabolic conditions including diabetes, PCOS, and thyroid disorders. 20Hecto goes beyond calorie counting, tracking what actually matters for metabolic health: glycaemic load, blood glucose patterns, lab value trends, fasting windows, and medication adherence. It is connected to a Practitioner Portal verified through the French RPPS registry, so patients and their care teams work from the same data. It is live on Google Play.",
+    "Alongside our consultancy work, we build our own products. Our current flagship is 20Hecto, a precision metabolic nutrition platform for people managing endocrine and metabolic conditions including diabetes, PCOS, and thyroid disorders. 20Hecto goes beyond calorie counting, tracking what actually matters for metabolic health: glycaemic load, blood glucose patterns, lab value trends, fasting windows, and medication adherence. It is connected to a Practitioner Portal verified through the French RPPS registry, so patients and their care teams work from the same data. It is live on iOS and Google Play.",
     "Building 20Hecto taught us something important: the best software is not the most technically impressive. It is the most honest, built around a real problem, with real people at the centre of every decision.",
     `That is the standard we bring to every client project. ${COMPANY_NAME}. ${COMPANY_ADDRESS}.`,
   ],
@@ -141,13 +143,14 @@ export type EnterpriseCaseStudy = {
   image?: string;
   imageAlt?: string;
   isGuardian?: boolean;
+  relatedLinks?: { label: string; url: string }[];
   details: CaseStudyDetailSection[];
 };
 
 export const enterpriseCaseStudies = {
-  title: "How we work in practice",
+  title: "Built to make a difference.",
   intro:
-    "These are products and systems we have designed, built, and shipped. Each one represents a specific problem, a deliberate technical approach, and a measurable outcome.",
+    "Real products. Real operational challenges. A selection of the platforms and connected systems we have taken from first idea to production.",
   items: [
     {
       id: "20hecto",
@@ -158,8 +161,8 @@ export const enterpriseCaseStudies = {
       techStack: "React 19, Node.js, Neon PostgreSQL",
       deployment: "app.20hecto.com",
       url: "https://app.20hecto.com",
-      image: "/showcase/NutriTrack1.png",
-      imageAlt: "20Hecto precision nutrition platform dashboard",
+      image: "/showcase/real/20hecto-metabolic-score.jpeg",
+      imageAlt: "20Hecto metabolic health score on mobile",
       details: [
         {
           heading: "The Problem",
@@ -175,7 +178,7 @@ export const enterpriseCaseStudies = {
         },
         {
           heading: "Status",
-          body: "Live on Google Play. Apple App Store release targeted before end of 2026.",
+          body: "Live on both iOS and Google Play.",
         },
       ],
     },
@@ -232,15 +235,18 @@ export const enterpriseCaseStudies = {
     },
     {
       id: "prestige",
-      title: "Prestige by Ekhaya: Car Wash Management Platform",
+      title: "Prestige + Hopsvoir: Car Wash Experience & Operations",
       tags: ["Web Application", "Business Operations", "Full Stack"],
       summary:
-        "A Next.js and Prisma platform managing the full operational lifecycle of a car wash business in Cape Town.",
+        "A connected customer booking experience and operations platform managing the full lifecycle of a car wash business in Cape Town.",
       techStack: "Next.js, Prisma, PostgreSQL",
       deployment: "prestigebyekhaya.com",
       url: "https://prestigebyekhaya.com/",
-      image: "/showcase/Ekhaya1.png",
-      imageAlt: "Prestige by Ekhaya car wash management platform",
+      relatedLinks: [
+        { label: "Visit Hopsvoir", url: "https://hopsvoir.com/#carwash" },
+      ],
+      image: "/showcase/real/prestige-customer-booking.jpeg",
+      imageAlt: "Prestige customer car wash booking experience",
       details: [
         {
           heading: "The Problem",
@@ -248,7 +254,7 @@ export const enterpriseCaseStudies = {
         },
         {
           heading: "The Solution",
-          body: "Prestige by Ekhaya is a Next.js and Prisma platform built on PostgreSQL, designed to manage the full operational lifecycle of a car wash business. It covers booking management, staff scheduling, customer records, service history, and revenue reporting.",
+          body: "Prestige gives customers a polished mobile booking experience, while Hopsvoir gives the operations team a live queue, vehicle intake, booking management, inventory controls, and revenue analytics. Built with Next.js, Prisma, and PostgreSQL, the two experiences connect the customer journey to the work happening on site.",
         },
         {
           heading: "Status",
@@ -258,8 +264,8 @@ export const enterpriseCaseStudies = {
     },
     {
       id: "guardian",
-      title: "Guardian: AI Threat Investigation Workspace",
-      tags: ["CyberSecurity", "AI Integration", "Workflow Orchestration"],
+      title: "Hopstec Guardian: Cybersecurity & AI Threat Investigation",
+      tags: ["Cybersecurity", "AI Integration", "Workflow Orchestration"],
       summary:
         "A Django-based threat investigation workspace combining three AI-assisted fraud detection agents with Temporal workflow orchestration.",
       techStack:
@@ -267,8 +273,6 @@ export const enterpriseCaseStudies = {
       deployment: "hopstechguardian.com",
       url: "https://hopstechguardian.com",
       isGuardian: true,
-      image: "/showcase/NP1.png",
-      imageAlt: "Guardian AI threat investigation workspace",
       details: [
         {
           heading: "The Problem",
@@ -302,9 +306,82 @@ export const enterpriseMetrics = [
   { value: "Full-stack", label: "Design to deployment", static: true },
 ] as const;
 
-export const enterpriseTestimonials = {
-  title: "What clients say",
-  intro: "Feedback from teams we have built production systems for.",
+export type SocialProofQuote = {
+  kind: "quote";
+  id: string;
+  quote: string;
+  name: string;
+  role: string;
+  company: string;
+  project: string;
+  projectHref?: string;
+};
+
+export type SocialProofOutcome = {
+  kind: "outcome";
+  id: string;
+  project: string;
+  projectHref?: string;
+  result: string;
+  detail: string;
+  status: string;
+};
+
+export type SocialProofItem = SocialProofQuote | SocialProofOutcome;
+
+/**
+ * Homepage social proof is curated content — not seed placeholders.
+ * Only include quotes you can stand behind; otherwise use outcome cards tied to shipped work.
+ */
+export const enterpriseSocialProof = {
+  kicker: "Proof",
+  titleLead: "Results that",
+  titleEm: "hold up",
+  titleTrail: "in production.",
+  intro:
+    "Quotes from teams we have shipped with, and measurable outcomes from products still running today.",
+  items: [
+    {
+      kind: "quote",
+      id: "prestige-papy",
+      quote:
+        "Herve delivered a car wash management platform that transformed our business operations. Bookings, memberships, and revenue tracking finally live in one system — and it has been instrumental in scaling PRESTIGE.",
+      name: "Papy Kapole",
+      role: "CEO",
+      company: "PRESTIGE by Ekhaya",
+      project: "Prestige + Hopsvoir",
+      projectHref: "https://prestigebyekhaya.com/",
+    },
+    {
+      kind: "outcome",
+      id: "talaria-ops",
+      project: "Talaria",
+      result: "Shipment processing moved from scattered tools to one live operations dashboard.",
+      detail:
+        "Built for a photonic integrated circuits manufacturer. Inventory, shipments, and location monitoring now share a single source of truth used by the operations team daily.",
+      status: "In production",
+    },
+    {
+      kind: "outcome",
+      id: "20hecto-live",
+      project: "20Hecto",
+      projectHref: "https://app.20hecto.com",
+      result: "Live metabolic nutrition platform with practitioner access via RPPS verification.",
+      detail:
+        "Shipped as a full-stack product: patient app, clinical summary flows, and AI-assisted meal guidance — available on Google Play and the App Store.",
+      status: "Live · iOS & Android",
+    },
+    {
+      kind: "outcome",
+      id: "guardian-live",
+      project: "Hopstec Guardian",
+      projectHref: "https://hopstechguardian.com",
+      result: "AI threat investigations with durable workflow state, not one-shot verdicts.",
+      detail:
+        "Three agents, Temporal orchestration, case memory, and analyst workspace — live at hopstechguardian.com.",
+      status: "Live",
+    },
+  ] satisfies SocialProofItem[],
 };
 
 export const enterpriseFounder = {
@@ -328,7 +405,8 @@ export const enterpriseCareers = {
   intro:
     "Hopstec Innovation is a Paris-based team building custom platforms, connected products, and regulated HealthTech systems. We hire people who care about craft, accountability, and outcomes — not slide decks.",
   pathsTitle: "Career paths",
-  pathsIntro: "We grow engineers across the stacks and domains we deliver for clients every day.",
+  pathsIntro:
+    "We grow engineers across the stacks and domains we deliver for clients every day.",
   paths: [
     {
       title: "Full-Stack Engineering",
@@ -354,10 +432,12 @@ export const enterpriseCareers = {
   openRolesTitle: "Open roles",
   openRolesIntro:
     "We do not always have a live listing, but we are always interested in hearing from strong engineers and builders.",
-  openRolesNote: "No open positions listed right now — send us your profile and we will keep you in mind.",
+  openRolesNote:
+    "No open positions listed right now — send us your profile and we will keep you in mind.",
   cta: "Send your profile",
   ctaHref: "/contact",
-  ctaHint: "Include your GitHub, LinkedIn, or portfolio and the path that interests you most.",
+  ctaHint:
+    "Include your GitHub, LinkedIn, or portfolio and the path that interests you most.",
 };
 
 export const enterpriseSectionNav = [
@@ -374,8 +454,14 @@ export const enterpriseHowWeShip = {
   intro:
     "Every engagement follows a disciplined delivery model, from discovery and architecture through automated testing, staging, and production deployment. Your team inherits systems they can own.",
   stages: [
-    { name: "Discover", desc: "Define the problem, scope, and success criteria" },
-    { name: "Architect", desc: "Design systems around your workflows and constraints" },
+    {
+      name: "Discover",
+      desc: "Define the problem, scope, and success criteria",
+    },
+    {
+      name: "Architect",
+      desc: "Design systems around your workflows and constraints",
+    },
     { name: "Build", desc: "Iterative development with continuous feedback" },
     { name: "Test", desc: "Automated quality gates at every stage" },
     { name: "Deploy", desc: "Staging validation before production release" },
@@ -391,11 +477,13 @@ export const enterpriseClientVisibility = {
   features: [
     {
       title: "Secure Access",
-      description: "Passwordless magic-link authentication, with no credentials to manage",
+      description:
+        "Passwordless magic-link authentication, with no credentials to manage",
     },
     {
       title: "Project Dashboard",
-      description: "Live progress, milestones, phases, and deliverable tracking",
+      description:
+        "Live progress, milestones, phases, and deliverable tracking",
     },
     {
       title: "Direct Communication",
@@ -403,7 +491,8 @@ export const enterpriseClientVisibility = {
     },
     {
       title: "Payment Transparency",
-      description: "Invoice tracking, installment schedules, and milestone-linked payments",
+      description:
+        "Invoice tracking, installment schedules, and milestone-linked payments",
     },
   ],
   cta: "Access your portal",
@@ -415,7 +504,44 @@ export const enterpriseFooter = {
   website: COMPANY_WEBSITE.replace(/^https?:\/\//, ""),
   websiteUrl: COMPANY_WEBSITE,
   email: COMPANY_EMAIL,
+  phone: COMPANY_PHONE,
+  phoneHref: COMPANY_PHONE_HREF,
   trustLine: "GDPR-aware · HealthTech experience · Paris, FR",
+  tagline:
+    "Paris-based software consultancy. Custom products, infrastructure, and automation — built to ship and stay owned.",
+  companyLinks: [
+    { label: "About", href: "/#about" },
+    { label: "Services", href: "/#services" },
+    { label: "How we ship", href: "/#how-we-ship" },
+    { label: "Careers", href: "/careers" },
+  ],
+  workLinks: [
+    { label: "Case studies", href: "/#case-studies" },
+    { label: "20Hecto", href: "https://app.20hecto.com", external: true },
+    { label: "Hopstec Guardian", href: "https://hopstechguardian.com", external: true },
+    { label: "AquaPulse", href: "/aquapulse" },
+  ],
+  clientLinks: [
+    { label: "Client portal", href: "/client-portal" },
+    { label: "Contact", href: "/contact" },
+  ],
+  socialLinks: [
+    {
+      label: "GitHub",
+      href: "https://github.com/hopstech",
+      network: "github" as const,
+    },
+    {
+      label: "LinkedIn",
+      href: "https://linkedin.com/in/herve-kajingu",
+      network: "linkedin" as const,
+    },
+  ],
+  frenchTech: {
+    label: "Member of La French Tech Grand Paris",
+    href: "https://www.frenchtech-grandparis.com",
+  },
+  /** @deprecated use companyLinks — kept for Navigation compatibility */
   navLinks: [
     { label: "About", href: "/#about" },
     { label: "Services", href: "/#services" },

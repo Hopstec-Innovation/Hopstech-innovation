@@ -30,12 +30,14 @@ const GET_USER_INFO_WITH_JWT_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserI
 
 class OAuthService {
   constructor(private client: ReturnType<typeof axios.create>) {
-    console.log("[OAuth] Initialized with baseURL:", ENV.oAuthServerUrl);
     if (!ENV.oAuthServerUrl) {
-      console.error(
-        "[OAuth] ERROR: OAUTH_SERVER_URL is not configured! Set OAUTH_SERVER_URL environment variable."
+      // Client portal auth uses magic links. Legacy Manus OAuth is optional.
+      console.info(
+        "[OAuth] OAUTH_SERVER_URL is not set. Client portal will use magic-link authentication."
       );
+      return;
     }
+    console.log("[OAuth] Initialized with baseURL:", ENV.oAuthServerUrl);
   }
 
   private decodeState(state: string): string {
@@ -270,8 +272,15 @@ class SDKServer {
     const signedInAt = new Date();
     let user = await db.getUserByOpenId(sessionUserId);
 
-    // If user not in DB, sync from OAuth server automatically
+    // If user not in DB, sync from OAuth server only when OAuth is configured.
     if (!user) {
+      if (!ENV.oAuthServerUrl) {
+        console.warn(
+          "[Auth] Session valid but user missing from database. OAuth sync skipped (magic-link mode)."
+        );
+        throw ForbiddenError("User not found");
+      }
+
       try {
         const userInfo = await this.getUserInfoWithJwt(sessionCookie ?? "");
         await db.upsertUser({

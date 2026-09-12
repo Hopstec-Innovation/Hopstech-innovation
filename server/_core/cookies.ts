@@ -44,8 +44,9 @@ export function getSessionCookieOptions(
   return {
     httpOnly: true,
     path: "/",
-    // Use 'lax' for localhost (non-HTTPS), 'none' for production (HTTPS)
-    sameSite: isSecure ? "none" : "lax",
+    // First-party portal sessions: Lax works for magic-link email clicks
+    // and same-origin API calls. Avoid SameSite=None unless cross-site OAuth needs it.
+    sameSite: "lax",
     secure: isSecure,
   };
 }

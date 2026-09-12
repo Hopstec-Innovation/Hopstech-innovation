@@ -46,18 +46,34 @@ export const magicLinkRouter = router({
         userAgent,
       });
 
-      // Generate magic link URL
-      const origin = ctx.req?.headers?.origin ||
-                     ctx.req?.headers?.referer?.replace(/\/$/, '') ||
-                     process.env.APP_URL ||
-                     'https://hopstecinnovation.com';
+      const resolveOrigin = () => {
+        if (process.env.APP_URL) {
+          return process.env.APP_URL.replace(/\/$/, "");
+        }
+
+        if (typeof ctx.req?.headers?.origin === "string" && ctx.req.headers.origin) {
+          return ctx.req.headers.origin.replace(/\/$/, "");
+        }
+
+        if (typeof ctx.req?.headers?.referer === "string" && ctx.req.headers.referer) {
+          try {
+            return new URL(ctx.req.headers.referer).origin;
+          } catch {
+            // Fall through to default.
+          }
+        }
+
+        return "https://hopstecinnovation.com";
+      };
+
+      const origin = resolveOrigin();
       const magicLinkUrl = `${origin}/auth/verify?token=${token}`;
 
-      console.log('[MagicLink] Generated magic link:', {
+      console.log("[MagicLink] Generated magic link:", {
         origin,
+        hasAppUrl: !!process.env.APP_URL,
         hasOriginHeader: !!ctx.req?.headers?.origin,
         hasRefererHeader: !!ctx.req?.headers?.referer,
-        usedAppUrl: !ctx.req?.headers?.origin && !ctx.req?.headers?.referer,
       });
 
       // Send email with magic link

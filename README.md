@@ -119,7 +119,7 @@ Professional DevOps & Software Development
 
 - **Headquarters**: 47 Rue Vivienne, 75002 Paris, France
 - **Email**: [hk@hopstecinnovation.com](mailto:hk@hopstecinnovation.com)
-- **Phone**: +33 7 76 02 66 88
+- **Phone**: +33 6 13 97 61 01
 - **Website**: [hopstecinnovation.com](https://hopstecinnovation.com)
 
 ### Business Inquiries

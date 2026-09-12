@@ -9,7 +9,6 @@ import ServicesSection from '../components/enterprise/ServicesSection';
 import TechStackSection from '../components/enterprise/TechStackSection';
 import CaseStudiesSection from '../components/enterprise/CaseStudiesSection';
 import TestimonialsSection from '../components/enterprise/TestimonialsSection';
-import MetricsStrip from '../components/enterprise/MetricsStrip';
 import HowWeShipSection from '../components/enterprise/HowWeShipSection';
 import ClientVisibilitySection from '../components/enterprise/ClientVisibilitySection';
 import FounderSection from '../components/enterprise/FounderSection';
@@ -39,7 +38,6 @@ const HomePage = () => {
       <TechStackSection />
       <CaseStudiesSection />
       <TestimonialsSection />
-      <MetricsStrip />
       <HowWeShipSection />
       <CircuitDivider />
       <ClientVisibilitySection />

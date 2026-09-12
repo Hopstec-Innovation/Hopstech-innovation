@@ -5,7 +5,7 @@
  */
 
 import { Resend } from 'resend';
-import { COMPANY_ADDRESS, COMPANY_NAME } from '@shared/const';
+import { COMPANY_ADDRESS, COMPANY_NAME } from '../shared/const';
 
 const emailCompanyFooter = `${COMPANY_NAME} · ${COMPANY_ADDRESS}`;
 
@@ -82,7 +82,7 @@ export async function sendMagicLinkEmail(data: MagicLinkEmailData): Promise<void
   });
 
   if (!resend) {
-    // In development, just log the magic link
+    // In development, just log the magic link so local testing still works.
     if (isDevelopment) {
       console.log('\n==============================================');
       console.log('🔐 MAGIC LINK (Development Mode)');
@@ -92,8 +92,13 @@ export async function sendMagicLinkEmail(data: MagicLinkEmailData): Promise<void
       console.log(`Link: ${data.magicLink}`);
       console.log(`Expires in: ${data.expiresInMinutes} minutes`);
       console.log('==============================================\n');
+      return;
     }
-    return;
+
+    // In production, never pretend the email was sent — clients would get stuck.
+    throw new Error(
+      'Email delivery is not configured. Please contact Hopstec support or try again later.'
+    );
   }
 
   const htmlContent = `

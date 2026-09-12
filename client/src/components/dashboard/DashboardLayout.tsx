@@ -1,4 +1,4 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import {
   LayoutDashboard,
@@ -18,6 +18,9 @@ import { Badge } from '../ui/badge';
 import { trpc } from '../../lib/trpc';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
+import { useAuth } from '../../hooks/useAuth';
+import { getClientPortalLoginPath } from '../../const';
+import { FullScreenLoader } from '../ui/loading-spinner';
 import NotificationCenter from './NotificationCenter';
 import PWAInstallPrompt from '../pwa/PWAInstallPrompt';
 import PWAUpdatePrompt from '../pwa/PWAUpdatePrompt';
@@ -28,25 +31,46 @@ interface DashboardLayoutProps {
 }
 
 const DashboardLayout = ({ children }: DashboardLayoutProps) => {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  
-  const { data: stats } = trpc.clientPortal.getDashboardStats.useQuery();
-  const { data: notifications } = trpc.clientPortal.getNotifications.useQuery({ 
-    limit: 5, 
-    offset: 0, 
-    unreadOnly: true 
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (isAuthenticated) return;
+    if (location === getClientPortalLoginPath()) return;
+    setLocation(getClientPortalLoginPath());
+  }, [authLoading, isAuthenticated, location, setLocation]);
+
+  const { data: stats } = trpc.clientPortal.getDashboardStats.useQuery(undefined, {
+    enabled: isAuthenticated,
   });
+  const { data: notifications } = trpc.clientPortal.getNotifications.useQuery(
+    {
+      limit: 5,
+      offset: 0,
+      unreadOnly: true,
+    },
+    { enabled: isAuthenticated }
+  );
 
   const logoutMutation = trpc.magicLink.logout.useMutation({
     onSuccess: () => {
       toast.success('Logged out successfully');
-      window.location.href = '/client-portal';
+      window.location.href = getClientPortalLoginPath();
     },
     onError: () => {
       toast.error('Failed to logout');
     },
   });
+
+  if (authLoading) {
+    return <FullScreenLoader message="Loading HOPSTECH Portal..." />;
+  }
+
+  if (!isAuthenticated) {
+    return <FullScreenLoader message="Redirecting to sign in..." />;
+  }
 
   const navItems = [
     {
