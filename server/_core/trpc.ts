@@ -3,9 +3,23 @@ import { isInternalRole } from '../../shared/roles';
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import type { TrpcContext } from "./context";
+import { sanitizePublicErrorMessage } from "./safeError";
+
+const isProd = process.env.NODE_ENV === "production";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
+  errorFormatter({ shape, error }) {
+    const message = sanitizePublicErrorMessage(shape.message);
+    return {
+      ...shape,
+      message,
+      data: {
+        ...shape.data,
+        stack: isProd ? undefined : error.stack,
+      },
+    };
+  },
 });
 
 export const router = t.router;

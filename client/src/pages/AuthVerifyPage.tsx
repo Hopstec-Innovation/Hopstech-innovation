@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Button } from '../components/ui/button';
 import { trpc } from '../lib/trpc';
 import { dashboardPathForRole, type PortalAudience } from '@shared/roles';
+import { safeAuthErrorMessage } from '../lib/safeErrorMessage';
 
 const AuthVerifyPage = () => {
   const [, setLocation] = useLocation();
@@ -30,7 +31,7 @@ const AuthVerifyPage = () => {
     },
     onError: (error) => {
       setStatus('error');
-      setErrorMessage(error.message || 'Failed to verify magic link');
+      setErrorMessage(safeAuthErrorMessage(error.message));
     },
   });
 
@@ -92,7 +93,7 @@ const AuthVerifyPage = () => {
                     </div>
                     <CardTitle className="text-white text-2xl">Verification Failed</CardTitle>
                     <CardDescription className="text-gray-400">
-                      {errorMessage}
+                      We could not complete sign-in.
                     </CardDescription>
                   </>
                 )}

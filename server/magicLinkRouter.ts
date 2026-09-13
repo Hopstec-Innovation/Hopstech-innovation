@@ -19,6 +19,7 @@ import {
   isInternalRole,
   PORTAL_AUDIENCES,
 } from "../shared/roles";
+import { toPublicTrpcError } from "./_core/safeError";
 
 const MAGIC_LINK_EXPIRY_MINUTES = 15;
 
@@ -173,93 +174,103 @@ export const magicLinkRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const { token, portal } = input;
+      try {
+        const { token, portal } = input;
 
-      const magicLink = await getMagicLinkByToken(token);
+        const magicLink = await getMagicLinkByToken(token);
 
-      if (!magicLink) {
-        throw new Error("Invalid or expired magic link");
-      }
+        if (!magicLink) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Invalid or expired magic link",
+          });
+        }
 
-      if (magicLink.status === "used") {
-        throw new Error("This magic link has already been used");
-      }
+        if (magicLink.status === "used") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "This magic link has already been used",
+          });
+        }
 
-      if (new Date() > magicLink.expiresAt) {
-        throw new Error("This magic link has expired");
-      }
+        if (new Date() > magicLink.expiresAt) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "This magic link has expired",
+          });
+        }
 
-      await markMagicLinkAsUsed(token);
+        await markMagicLinkAsUsed(token);
 
-      let user = await getUserByEmail(magicLink.email);
+        let user = await getUserByEmail(magicLink.email);
 
-      if (!user) {
-        if (portal === "team") {
+        if (!user) {
+          if (portal === "team") {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: STAFF_GENERIC_FAIL,
+            });
+          }
+
+          const openId = `magic_${nanoid(16)}`;
+          await upsertUser({
+            openId,
+            email: magicLink.email,
+            name: magicLink.email.split("@")[0],
+            loginMethod: "magic-link",
+            role: "client",
+            lastSignedIn: new Date(),
+          });
+
+          user = await getUserByEmail(magicLink.email);
+        } else {
+          if (portal === "team") {
+            if (
+              !isInternalRole(user.role) ||
+              !emailAllowedForStaff(magicLink.email)
+            ) {
+              throw new TRPCError({
+                code: "FORBIDDEN",
+                message: STAFF_GENERIC_FAIL,
+              });
+            }
+          }
+
+          await upsertUser({
+            openId: user.openId,
+            lastSignedIn: new Date(),
+          });
+        }
+
+        if (!user) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "We could not complete sign-in. Please request a new link.",
+          });
+        }
+
+        if (portal === "team" && !isInternalRole(user.role)) {
           throw new TRPCError({
             code: "FORBIDDEN",
             message: STAFF_GENERIC_FAIL,
           });
         }
 
-        const openId = `magic_${nanoid(16)}`;
-        await upsertUser({
-          openId,
-          email: magicLink.email,
-          name: magicLink.email.split("@")[0],
-          loginMethod: "magic-link",
-          role: "client",
-          lastSignedIn: new Date(),
+        const sessionToken = await sdk.createSessionToken(user.openId, {
+          name: user.name || user.email || "",
         });
 
-        user = await getUserByEmail(magicLink.email);
-      } else {
-        if (portal === "team") {
-          if (
-            !isInternalRole(user.role) ||
-            !emailAllowedForStaff(magicLink.email)
-          ) {
-            throw new TRPCError({
-              code: "FORBIDDEN",
-              message: STAFF_GENERIC_FAIL,
-            });
-          }
-        }
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(COOKIE_NAME, sessionToken, cookieOptions);
 
-        await upsertUser({
-          openId: user.openId,
-          lastSignedIn: new Date(),
-        });
+        return {
+          success: true,
+          user: sessionUser(user),
+          message: "Successfully authenticated!",
+        };
+      } catch (error) {
+        toPublicTrpcError(error, "auth");
       }
-
-      if (!user) {
-        throw new Error("Failed to create or retrieve user");
-      }
-
-      // Client portal magic link must not elevate into ops.
-      if (portal !== "team" && isInternalRole(user.role)) {
-        // Staff may still open a client session if they used the client flow,
-        // but verify destination stays role-based via dashboardPath.
-      }
-
-      if (portal === "team" && !isInternalRole(user.role)) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: STAFF_GENERIC_FAIL,
-        });
-      }
-
-      const sessionToken = await sdk.createSessionToken(user.openId, {
-        name: user.name || user.email || "",
-      });
-
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.cookie(COOKIE_NAME, sessionToken, cookieOptions);
-
-      return {
-        success: true,
-        user: sessionUser(user),
-        message: "Successfully authenticated!",
-      };
     }),
 
   getCurrentSession: publicProcedure.query(async ({ ctx }) => {

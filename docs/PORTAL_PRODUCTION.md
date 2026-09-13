@@ -36,8 +36,11 @@ Redeploy after changing env vars.
 ## 3. Database
 
 1. `DATABASE_URL` points at the production Neon branch.
-2. Schema is up to date (`pnpm db:push` or your usual migration path).
-3. `magic_links` and `users` tables exist (Drizzle schema).
+2. Schema is up to date. **Required for magic-link sign-in after ops spine deploy:**
+   - Run `scripts/apply-pending-migrations.sql` in the Neon SQL editor (adds `users.jobTitle` + `staff` role), **or**
+   - Run `pnpm db:push` locally against production `DATABASE_URL`.
+3. If ops tables are missing, also apply `drizzle/0006_live_project_tracker.sql` and `drizzle/0007_ops_commercial_spine.sql`.
+4. `magic_links` and `users` tables exist (Drizzle schema).
 
 ## 4. End-to-end smoke test
 
