@@ -14,6 +14,16 @@
       "source": "/portfolio/:slug",
       "destination": "/",
       "permanent": true
+    },
+    {
+      "source": "/dashboard",
+      "destination": "/client-portal",
+      "permanent": false
+    },
+    {
+      "source": "/dashboard/",
+      "destination": "/client-portal",
+      "permanent": false
     }
   ],
   "rewrites": [

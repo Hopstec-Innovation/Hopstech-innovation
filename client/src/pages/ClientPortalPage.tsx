@@ -40,10 +40,12 @@ const ClientPortalPage = () => {
   const [magicLinkSent, setMagicLinkSent] = useState(false);
 
   useEffect(() => {
+    // /dashboard and team magic-link land here via Vercel/auth; send staff to ops
+    // unless they explicitly opened the client portal (?view=client).
     if (!authLoading && isAuthenticated && user && isInternalRole(user.role)) {
       const params = new URLSearchParams(window.location.search);
-      if (params.get('portal') === 'team') {
-        setLocation('/internal');
+      if (params.get("view") !== "client") {
+        setLocation("/internal");
       }
     }
   }, [authLoading, isAuthenticated, user, setLocation]);
@@ -137,8 +139,11 @@ const ClientPortalPage = () => {
     return <FullScreenLoader message="Loading Hopstec portal..." />;
   }
 
-  // Authenticated - Show Dashboard
+  // Authenticated client dashboard. Hopstec team is redirected to /internal above.
   if (isAuthenticated && user) {
+    if (isInternalRole(user.role)) {
+      return <FullScreenLoader message="Opening engineering ops..." />;
+    }
     return (
       <DashboardLayout>
         <main className="flex-1 overflow-y-auto">

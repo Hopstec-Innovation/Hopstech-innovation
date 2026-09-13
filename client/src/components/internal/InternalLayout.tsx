@@ -58,7 +58,7 @@ const InternalLayout = ({
           <Link href="/internal/team">
             <a className="portal-nav-link">Team & roles</a>
           </Link>
-          <Link href="/client-portal">
+          <Link href="/client-portal?view=client">
             <a className="portal-nav-link">Client portal</a>
           </Link>
           <Link href="/">
