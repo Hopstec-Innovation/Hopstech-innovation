@@ -333,7 +333,8 @@ const InternalProjectPage = () => {
               <option value="">Unassigned</option>
               {(staff || []).map((u) => (
                 <option key={u.id} value={u.id}>
-                  {u.name || u.email} ({u.role})
+                  {u.name || u.email}
+                  {u.jobTitle ? ` · ${u.jobTitle}` : ` · ${u.role}`}
                 </option>
               ))}
             </select>

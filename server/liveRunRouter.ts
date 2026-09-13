@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { and, asc, desc, eq, or } from "drizzle-orm";
-import { adminProcedure, protectedProcedure, router } from "./_core/trpc";
+import { staffProcedure, protectedProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import {
   clientProjectsExtended,
@@ -9,6 +9,7 @@ import {
   projectLiveSteps,
   users,
 } from "../drizzle/schema";
+import { isInternalRole } from "../shared/roles";
 import {
   DEFAULT_LIVE_STEPS,
   buildStepInserts,
@@ -62,7 +63,7 @@ export const liveRunRouter = router({
     }),
 
   /** Admin: list all client projects with optional active run summary */
-  listProjects: adminProcedure.query(async () => {
+  listProjects: staffProcedure.query(async () => {
     const db = await requireDb();
     const projects = await db
       .select({
@@ -98,7 +99,7 @@ export const liveRunRouter = router({
   }),
 
   /** Admin: full run bundle for a project (active or latest) */
-  getProjectLiveRun: adminProcedure
+  getProjectLiveRun: staffProcedure
     .input(z.object({ projectId: z.number() }))
     .query(async ({ input }) => {
       const db = await requireDb();
@@ -126,7 +127,7 @@ export const liveRunRouter = router({
       return { project, live: bundle };
     }),
 
-  startLiveRun: adminProcedure
+  startLiveRun: staffProcedure
     .input(
       z.object({
         projectId: z.number(),
@@ -226,7 +227,7 @@ export const liveRunRouter = router({
       return getLiveRunBundle(run.id);
     }),
 
-  setStepStatus: adminProcedure
+  setStepStatus: staffProcedure
     .input(
       z.object({
         stepId: z.number(),
@@ -361,7 +362,7 @@ export const liveRunRouter = router({
       return getLiveRunBundle(run.id);
     }),
 
-  pauseLiveRun: adminProcedure
+  pauseLiveRun: staffProcedure
     .input(z.object({ runId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const db = await requireDb();
@@ -382,7 +383,7 @@ export const liveRunRouter = router({
       return getLiveRunBundle(run.id);
     }),
 
-  resumeLiveRun: adminProcedure
+  resumeLiveRun: staffProcedure
     .input(z.object({ runId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const db = await requireDb();
@@ -403,7 +404,7 @@ export const liveRunRouter = router({
       return getLiveRunBundle(run.id);
     }),
 
-  completeLiveRun: adminProcedure
+  completeLiveRun: staffProcedure
     .input(z.object({ runId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const db = await requireDb();
@@ -449,7 +450,7 @@ export const liveRunRouter = router({
       return getLiveRunBundle(run.id);
     }),
 
-  cancelLiveRun: adminProcedure
+  cancelLiveRun: staffProcedure
     .input(z.object({ runId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const db = await requireDb();
@@ -474,7 +475,7 @@ export const liveRunRouter = router({
       return getLiveRunBundle(run.id);
     }),
 
-  upsertLiveSteps: adminProcedure
+  upsertLiveSteps: staffProcedure
     .input(
       z.object({
         runId: z.number(),
@@ -581,7 +582,7 @@ export const liveRunRouter = router({
       return getLiveRunBundle(run.id);
     }),
 
-  defaultStepTemplate: adminProcedure.query(() => {
+  defaultStepTemplate: staffProcedure.query(() => {
     return DEFAULT_LIVE_STEPS.map((s) => ({
       label: s.label,
       description: s.description,
@@ -593,8 +594,8 @@ export const liveRunRouter = router({
     .input(z.object({ projectId: z.number() }))
     .query(async ({ ctx, input }) => {
       const db = await requireDb();
-      const isAdmin = ctx.user.role === "admin";
-      if (!isAdmin) {
+      const isStaff = isInternalRole(ctx.user.role);
+      if (!isStaff) {
         const [owned] = await db
           .select()
           .from(clientProjectsExtended)

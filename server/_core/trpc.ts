@@ -1,4 +1,5 @@
 import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from '../../shared/const';
+import { isInternalRole } from '../../shared/roles';
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import type { TrpcContext } from "./context";
@@ -25,21 +26,40 @@ const requireUser = t.middleware(async opts => {
   });
 });
 
-export const protectedProcedure = t.procedure.use(requireUser);
+const requireAdmin = t.middleware(async opts => {
+  const { ctx, next } = opts;
 
-export const adminProcedure = t.procedure.use(
-  t.middleware(async opts => {
-    const { ctx, next } = opts;
+  if (!ctx.user || ctx.user.role !== "admin") {
+    throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+  }
 
-    if (!ctx.user || ctx.user.role !== 'admin') {
-      throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
-    }
+  return next({
+    ctx: {
+      ...ctx,
+      user: ctx.user,
+    },
+  });
+});
 
-    return next({
-      ctx: {
-        ...ctx,
-        user: ctx.user,
-      },
+const requireStaff = t.middleware(async opts => {
+  const { ctx, next } = opts;
+
+  if (!ctx.user || !isInternalRole(ctx.user.role)) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Hopstec team access required",
     });
-  }),
-);
+  }
+
+  return next({
+    ctx: {
+      ...ctx,
+      user: ctx.user,
+    },
+  });
+});
+
+export const protectedProcedure = t.procedure.use(requireUser);
+export const adminProcedure = t.procedure.use(requireAdmin);
+/** Engineering / delivery console — admin or staff. */
+export const staffProcedure = t.procedure.use(requireStaff);

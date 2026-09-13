@@ -1,8 +1,11 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { adminProcedure, protectedProcedure, router } from "./_core/trpc";
+import { adminProcedure, protectedProcedure, staffProcedure, router } from "./_core/trpc";
+import { isInternalRole, STAFF_JOB_TITLES } from "../shared/roles";
 import { getDb } from "./db";
+import { upsertUser, getUserByEmail } from "./db";
+import { nanoid } from "nanoid";
 import {
   clientProjectsExtended,
   engagementDocuments,
@@ -137,7 +140,7 @@ const docInput = z.object({
 
 export const opsRouter = router({
   /** Admin intake: inquiries awaiting promotion */
-  listInquiries: adminProcedure.query(async () => {
+  listInquiries: staffProcedure.query(async () => {
     const db = await requireDb();
     return db
       .select()
@@ -147,7 +150,7 @@ export const opsRouter = router({
   }),
 
   /** Admin: all engagements with commercial stage */
-  listEngagements: adminProcedure.query(async () => {
+  listEngagements: staffProcedure.query(async () => {
     const db = await requireDb();
     const projects = await db
       .select()
@@ -167,7 +170,7 @@ export const opsRouter = router({
     }));
   }),
 
-  getEngagement: adminProcedure
+  getEngagement: staffProcedure
     .input(z.object({ projectId: z.number() }))
     .query(async ({ input }) => {
       const db = await requireDb();
@@ -201,7 +204,7 @@ export const opsRouter = router({
     }),
 
   /** Promote inquiry into a client project at intake stage */
-  promoteInquiry: adminProcedure
+  promoteInquiry: staffProcedure
     .input(
       z.object({
         inquiryId: z.number(),
@@ -272,8 +275,8 @@ export const opsRouter = router({
     .input(docInput)
     .mutation(async ({ ctx, input }) => {
       const db = await requireDb();
-      const isAdmin = ctx.user.role === "admin";
-      if (!isAdmin) {
+      const isStaff = isInternalRole(ctx.user.role);
+      if (!isStaff) {
         await assertOwned(input.projectId, ctx.user.id);
         if (input.type === "quotation") {
           throw new TRPCError({
@@ -302,7 +305,7 @@ export const opsRouter = router({
           fileUrl: input.fileUrl,
           notes: input.notes || null,
           uploadedBy: ctx.user.id,
-          uploadedByRole: isAdmin ? "staff" : "client",
+          uploadedByRole: isStaff ? "staff" : "client",
         })
         .returning();
 
@@ -340,7 +343,7 @@ export const opsRouter = router({
       return doc;
     }),
 
-  sendQuotation: adminProcedure
+  sendQuotation: staffProcedure
     .input(
       z.object({
         projectId: z.number(),
@@ -405,7 +408,7 @@ export const opsRouter = router({
       return { success: true };
     }),
 
-  markQuotationAccepted: adminProcedure
+  markQuotationAccepted: staffProcedure
     .input(z.object({ projectId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const db = await requireDb();
@@ -428,7 +431,7 @@ export const opsRouter = router({
     }),
 
   /** PO reception = commit date locked; work may start */
-  recordPoReceived: adminProcedure
+  recordPoReceived: staffProcedure
     .input(
       z.object({
         projectId: z.number(),
@@ -475,7 +478,7 @@ export const opsRouter = router({
     }),
 
   /** Phase B: internal dispatch */
-  updateDispatch: adminProcedure
+  updateDispatch: staffProcedure
     .input(
       z.object({
         projectId: z.number(),
@@ -518,26 +521,67 @@ export const opsRouter = router({
       return { success: true };
     }),
 
-  listStaff: adminProcedure.query(async () => {
+  listStaff: staffProcedure.query(async () => {
     const db = await requireDb();
-    return db
+    const rows = await db
       .select({
         id: users.id,
         name: users.name,
         email: users.email,
         role: users.role,
+        jobTitle: users.jobTitle,
       })
       .from(users)
       .orderBy(asc(users.name));
+
+    return rows.filter((row) => isInternalRole(row.role));
   }),
+
+  /** Admin-only: grant Hopstec team access + engineering job title. */
+  setStaffAccess: adminProcedure
+    .input(
+      z.object({
+        userId: z.number(),
+        role: z.enum(["admin", "staff", "client"]),
+        jobTitle: z.enum(STAFF_JOB_TITLES).nullable().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await requireDb();
+      const [target] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, input.userId))
+        .limit(1);
+
+      if (!target) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+      }
+
+      await db
+        .update(users)
+        .set({
+          role: input.role,
+          jobTitle:
+            input.role === "client"
+              ? null
+              : input.jobTitle === undefined
+                ? target.jobTitle
+                : input.jobTitle,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, input.userId));
+
+      return { success: true };
+    }),
 
   /** Client-safe commercial timeline */
   getCommercialTimeline: protectedProcedure
     .input(z.object({ projectId: z.number() }))
     .query(async ({ ctx, input }) => {
       const db = await requireDb();
-      const isAdmin = ctx.user.role === "admin";
-      const project = isAdmin
+      const isStaff = isInternalRole(ctx.user.role);
+      const project = isStaff
         ? await getProjectOrThrow(input.projectId)
         : await assertOwned(input.projectId, ctx.user.id);
 
@@ -553,12 +597,12 @@ export const opsRouter = router({
         .where(eq(engagementEvents.projectId, input.projectId))
         .orderBy(asc(engagementEvents.createdAt));
 
-      const publicEvents = isAdmin
+      const publicEvents = isStaff
         ? events
         : events.filter((e) => !e.isInternal);
 
       return {
-        project: isAdmin ? project : toClientProject(project as unknown as Record<string, unknown>),
+        project: isStaff ? project : toClientProject(project as unknown as Record<string, unknown>),
         docs,
         events: publicEvents,
         stages: [
@@ -576,8 +620,8 @@ export const opsRouter = router({
   getDeliveryKpis: protectedProcedure
     .input(z.object({ projectId: z.number() }))
     .query(async ({ ctx, input }) => {
-      const isAdmin = ctx.user.role === "admin";
-      const project = isAdmin
+      const isStaff = isInternalRole(ctx.user.role);
+      const project = isStaff
         ? await getProjectOrThrow(input.projectId)
         : await assertOwned(input.projectId, ctx.user.id);
 
@@ -608,7 +652,7 @@ export const opsRouter = router({
       };
     }),
 
-  setDeliveryStage: adminProcedure
+  setDeliveryStage: staffProcedure
     .input(
       z.object({
         projectId: z.number(),
@@ -639,6 +683,79 @@ export const opsRouter = router({
         isInternal: true,
       });
       return { success: true };
+    }),
+
+  /** Admin directory — provision engineering roles. */
+  listDirectoryUsers: adminProcedure.query(async () => {
+    const db = await requireDb();
+    return db
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        role: users.role,
+        jobTitle: users.jobTitle,
+        lastSignedIn: users.lastSignedIn,
+      })
+      .from(users)
+      .orderBy(asc(users.email));
+  }),
+
+  provisionStaffByEmail: adminProcedure
+    .input(
+      z.object({
+        email: z.string().email(),
+        name: z.string().min(2).optional(),
+        role: z.enum(["admin", "staff"]),
+        jobTitle: z.enum(STAFF_JOB_TITLES),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await requireDb();
+      let user = await getUserByEmail(input.email);
+
+      if (!user) {
+        const openId = `magic_${nanoid(16)}`;
+        await upsertUser({
+          openId,
+          email: input.email,
+          name: input.name || input.email.split("@")[0],
+          loginMethod: "magic-link",
+          role: input.role,
+          jobTitle: input.jobTitle,
+          lastSignedIn: new Date(),
+        });
+        user = await getUserByEmail(input.email);
+      } else {
+        await db
+          .update(users)
+          .set({
+            role: input.role,
+            jobTitle: input.jobTitle,
+            name: input.name || user.name,
+            updatedAt: new Date(),
+          })
+          .where(eq(users.id, user.id));
+        user = await getUserByEmail(input.email);
+      }
+
+      if (!user) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to provision staff user",
+        });
+      }
+
+      return {
+        success: true,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          jobTitle: user.jobTitle,
+        },
+      };
     }),
 });
 

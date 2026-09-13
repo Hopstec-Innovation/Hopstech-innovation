@@ -15,7 +15,7 @@ import {
 /**
  * Enums - Define before tables that use them
  */
-export const userRoleEnum = pgEnum("user_role", ["user", "admin", "client"]);
+export const userRoleEnum = pgEnum("user_role", ["user", "admin", "client", "staff"]);
 export const contactStatusEnum = pgEnum("contact_status", ["new", "read", "replied", "archived"]);
 export const magicLinkStatusEnum = pgEnum("magic_link_status", ["pending", "used", "expired"]);
 export const projectInquiryStatusEnum = pgEnum("project_inquiry_status", ["new", "reviewing", "accepted", "rejected"]);
@@ -76,7 +76,10 @@ export const users = pgTable("users", {
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
+  /** Access role: client portal vs Hopstec team (staff/admin). */
   role: userRoleEnum("role").default("user").notNull(),
+  /** Engineering / delivery title for staff (e.g. Full-Stack Engineer). */
+  jobTitle: varchar("jobTitle", { length: 120 }),
   createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn", { mode: "date", withTimezone: true }).defaultNow().notNull(),

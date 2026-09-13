@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { publicProcedure, router } from "./_core/trpc";
 import { getDb, createMagicLink, getMagicLinkByToken, markMagicLinkAsUsed, getUserByEmail, upsertUser } from "./db";
 import { nanoid } from "nanoid";
@@ -6,8 +7,28 @@ import { sendMagicLinkEmail } from "./emailService";
 import { sdk } from "./_core/sdk";
 import { COOKIE_NAME } from "../shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
+import {
+  dashboardPathForRole,
+  isInternalRole,
+  PORTAL_AUDIENCES,
+} from "../shared/roles";
 
 const MAGIC_LINK_EXPIRY_MINUTES = 15;
+
+const sessionUser = (user: {
+  id: number;
+  email: string | null;
+  name: string | null;
+  role: string;
+  jobTitle?: string | null;
+}) => ({
+  id: user.id,
+  email: user.email,
+  name: user.name,
+  role: user.role,
+  jobTitle: user.jobTitle ?? null,
+  dashboardPath: dashboardPathForRole(user.role),
+});
 
 export const magicLinkRouter = router({
   // Request a magic link
@@ -16,6 +37,8 @@ export const magicLinkRouter = router({
       z.object({
         email: z.string().email("Invalid email address"),
         name: z.string().min(2, "Name must be at least 2 characters").optional(),
+        /** Client self-serve vs Hopstec team (provisioned accounts only). */
+        portal: z.enum(PORTAL_AUDIENCES).default("client"),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -24,7 +47,18 @@ export const magicLinkRouter = router({
         throw new Error("Database not available");
       }
 
-      const { email, name } = input;
+      const { email, name, portal } = input;
+
+      if (portal === "team") {
+        const existing = await getUserByEmail(email);
+        if (!existing || !isInternalRole(existing.role)) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message:
+              "This email is not provisioned for the Hopstec engineering console. Ask an admin to grant staff access.",
+          });
+        }
+      }
 
       // Get IP and user agent from request
       const ip = ctx.req?.headers?.['x-forwarded-for'] as string || 
@@ -67,10 +101,11 @@ export const magicLinkRouter = router({
       };
 
       const origin = resolveOrigin();
-      const magicLinkUrl = `${origin}/auth/verify?token=${token}`;
+      const magicLinkUrl = `${origin}/auth/verify?token=${token}&portal=${portal}`;
 
       console.log("[MagicLink] Generated magic link:", {
         origin,
+        portal,
         hasAppUrl: !!process.env.APP_URL,
         hasOriginHeader: !!ctx.req?.headers?.origin,
         hasRefererHeader: !!ctx.req?.headers?.referer,
@@ -103,10 +138,11 @@ export const magicLinkRouter = router({
     .input(
       z.object({
         token: z.string().min(1, "Token is required"),
+        portal: z.enum(PORTAL_AUDIENCES).optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const { token } = input;
+      const { token, portal } = input;
 
       // Get magic link from database
       const magicLink = await getMagicLinkByToken(token);
@@ -132,6 +168,14 @@ export const magicLinkRouter = router({
       let user = await getUserByEmail(magicLink.email);
 
       if (!user) {
+        if (portal === "team") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message:
+              "Hopstec team accounts must be provisioned by an admin before first sign-in.",
+          });
+        }
+
         // Create new user with magic link authentication
         const openId = `magic_${nanoid(16)}`;
         await upsertUser({
@@ -145,6 +189,14 @@ export const magicLinkRouter = router({
 
         user = await getUserByEmail(magicLink.email);
       } else {
+        if (portal === "team" && !isInternalRole(user.role)) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message:
+              "This account is client-only. Ask an admin to grant staff or admin access.",
+          });
+        }
+
         // Update last signed in
         await upsertUser({
           openId: user.openId,
@@ -166,12 +218,7 @@ export const magicLinkRouter = router({
 
       return {
         success: true,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-        },
+        user: sessionUser(user),
         message: "Successfully authenticated!",
       };
     }),
@@ -186,12 +233,7 @@ export const magicLinkRouter = router({
 
       return {
         authenticated: true,
-        user: {
-          id: ctx.user.id,
-          email: ctx.user.email,
-          name: ctx.user.name,
-          role: ctx.user.role,
-        },
+        user: sessionUser(ctx.user),
       };
     }),
 
@@ -207,4 +249,3 @@ export const magicLinkRouter = router({
       };
     }),
 });
-

@@ -1,34 +1,39 @@
-import { ReactNode, useEffect } from "react";
 import { Link, useLocation } from "wouter";
+import { useEffect } from "react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { COMPANY_NAME } from "@shared/const";
 import { useAuth } from "@/hooks/useAuth";
 import { FullScreenLoader } from "@/components/ui/loading-spinner";
 import { getClientPortalLoginPath } from "@/const";
+import { accessRoleLabel, isInternalRole } from "@shared/roles";
 import "@/components/dashboard/portal.css";
 
 type InternalLayoutProps = {
-  children: ReactNode;
+  children: React.ReactNode;
   title?: string;
 };
 
-const InternalLayout = ({ children, title = "Ops" }: InternalLayoutProps) => {
+const InternalLayout = ({
+  children,
+  title = "Delivery console",
+}: InternalLayoutProps) => {
   const { user, isAuthenticated, isLoading } = useAuth();
   const [, setLocation] = useLocation();
+  const canAccess = isInternalRole(user?.role);
 
   useEffect(() => {
     if (isLoading) return;
     if (!isAuthenticated) {
-      setLocation(getClientPortalLoginPath());
+      setLocation(`${getClientPortalLoginPath()}?portal=team`);
       return;
     }
-    if (user?.role !== "admin") {
+    if (!canAccess) {
       setLocation("/client-portal");
     }
-  }, [isLoading, isAuthenticated, user, setLocation]);
+  }, [isLoading, isAuthenticated, canAccess, setLocation]);
 
-  if (isLoading || !isAuthenticated || user?.role !== "admin") {
-    return <FullScreenLoader message="Loading Hopstec ops..." />;
+  if (isLoading || !isAuthenticated || !canAccess) {
+    return <FullScreenLoader message="Loading Hopstec delivery console..." />;
   }
 
   return (
@@ -39,7 +44,7 @@ const InternalLayout = ({ children, title = "Ops" }: InternalLayoutProps) => {
             <BrandLogo size="sm" showRing={false} />
             <span className="portal-brand-text">
               <span className="portal-brand-name">{COMPANY_NAME}</span>
-              <span className="portal-brand-sub">Internal ops</span>
+              <span className="portal-brand-sub">Engineering ops</span>
             </span>
           </a>
         </Link>
@@ -50,6 +55,9 @@ const InternalLayout = ({ children, title = "Ops" }: InternalLayoutProps) => {
           <Link href="/internal/intake">
             <a className="portal-nav-link">Intake queue</a>
           </Link>
+          <Link href="/internal/team">
+            <a className="portal-nav-link">Team & roles</a>
+          </Link>
           <Link href="/client-portal">
             <a className="portal-nav-link">Client portal</a>
           </Link>
@@ -57,6 +65,10 @@ const InternalLayout = ({ children, title = "Ops" }: InternalLayoutProps) => {
             <a className="portal-nav-link">Public site</a>
           </Link>
         </nav>
+        <div className="mt-auto border-t border-white/10 p-4 text-xs text-gray-400">
+          <p className="font-medium text-white">{user?.name}</p>
+          <p>{user?.jobTitle || accessRoleLabel(user?.role)}</p>
+        </div>
       </aside>
       <div className="portal-main">
         <header className="portal-topbar" style={{ display: "flex" }}>

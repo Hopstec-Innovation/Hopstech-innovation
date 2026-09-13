@@ -6,6 +6,10 @@ import AnalyticsScript from "./components/AnalyticsScript";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { ScrollProgress } from "./components/animations/ScrollProgress";
+import { useAuth } from "./hooks/useAuth";
+import { FullScreenLoader } from "./components/ui/loading-spinner";
+import { getClientPortalLoginPath } from "./const";
+import { dashboardPathForRole } from "@shared/roles";
 
 const HomePage = lazy(() => import("./pages/HomePage"));
 const ContactPage = lazy(() => import("./pages/ContactPage"));
@@ -25,6 +29,7 @@ const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage"));
 const InternalEngagementsPage = lazy(() => import("./pages/InternalEngagementsPage"));
 const InternalIntakePage = lazy(() => import("./pages/InternalIntakePage"));
 const InternalProjectPage = lazy(() => import("./pages/InternalProjectPage"));
+const InternalTeamPage = lazy(() => import("./pages/InternalTeamPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 function RouteLoader() {
@@ -32,6 +37,20 @@ function RouteLoader() {
     <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-center text-slate-400">
       Loading page...
     </div>
+  );
+}
+
+function DashboardRedirect() {
+  const { isAuthenticated, isLoading, user } = useAuth();
+
+  if (isLoading) {
+    return <FullScreenLoader message="Opening your dashboard..." />;
+  }
+  if (!isAuthenticated) {
+    return <Redirect to={getClientPortalLoginPath()} />;
+  }
+  return (
+    <Redirect to={user?.dashboardPath || dashboardPathForRole(user?.role)} />
   );
 }
 
@@ -46,6 +65,7 @@ function Router() {
       <Route path={"/careers"}>{() => <CareersPage />}</Route>
       <Route path={"/privacy"}>{() => <PrivacyPage />}</Route>
       <Route path={"/terms"}>{() => <TermsPage />}</Route>
+      <Route path={"/dashboard"}>{() => <DashboardRedirect />}</Route>
       <Route path={"/client-portal/projects/:id"}>{() => <ClientProjectDetailPage />}</Route>
       <Route path={"/client-portal/projects"}>{() => <ProjectsPage />}</Route>
       <Route path={"/client-portal/messages"}>{() => <MessagesPage />}</Route>
@@ -55,6 +75,7 @@ function Router() {
       <Route path={"/client-portal/analytics"}>{() => <AnalyticsPage />}</Route>
       <Route path={"/client-portal"}>{() => <ClientPortalPage />}</Route>
       <Route path={"/internal/intake"}>{() => <InternalIntakePage />}</Route>
+      <Route path={"/internal/team"}>{() => <InternalTeamPage />}</Route>
       <Route path={"/internal/projects/:id"}>{() => <InternalProjectPage />}</Route>
       <Route path={"/internal"}>{() => <InternalEngagementsPage />}</Route>
       <Route path={"/auth/verify"}>{() => <AuthVerifyPage />}</Route>

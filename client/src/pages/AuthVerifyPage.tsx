@@ -5,19 +5,23 @@ import PageLayout from '../components/PageLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { trpc } from '../lib/trpc';
+import { dashboardPathForRole, type PortalAudience } from '@shared/roles';
 
 const AuthVerifyPage = () => {
   const [, setLocation] = useLocation();
   const [status, setStatus] = useState<'verifying' | 'success' | 'error'>('verifying');
   const [errorMessage, setErrorMessage] = useState('');
+  const [redirectPath, setRedirectPath] = useState('/client-portal');
 
   const verifyMutation = trpc.magicLink.verifyMagicLink.useMutation({
     onSuccess: (data) => {
       setStatus('success');
-      // Redirect to client portal after 2 seconds
+      const path =
+        data.user.dashboardPath || dashboardPathForRole(data.user.role);
+      setRedirectPath(path);
       setTimeout(() => {
-        setLocation('/client-portal');
-      }, 2000);
+        setLocation(path);
+      }, 1200);
     },
     onError: (error) => {
       setStatus('error');
@@ -29,6 +33,11 @@ const AuthVerifyPage = () => {
     // Get token from URL query params
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
+    const portalParam = params.get('portal');
+    const portal: PortalAudience | undefined =
+      portalParam === 'team' || portalParam === 'client'
+        ? portalParam
+        : undefined;
 
     if (!token) {
       setStatus('error');
@@ -37,7 +46,7 @@ const AuthVerifyPage = () => {
     }
 
     // Verify the magic link token
-    verifyMutation.mutate({ token });
+    verifyMutation.mutate({ token, portal });
   }, []);
 
   return (
@@ -87,7 +96,7 @@ const AuthVerifyPage = () => {
               <CardContent className="text-center">
                 {status === 'success' && (
                   <p className="text-gray-300 mb-4">
-                    Redirecting to your dashboard...
+                    Opening your dashboard…
                   </p>
                 )}
 
@@ -114,4 +123,3 @@ const AuthVerifyPage = () => {
 };
 
 export default AuthVerifyPage;
-

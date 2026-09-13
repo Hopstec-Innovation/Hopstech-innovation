@@ -26,6 +26,7 @@ import PWAUpdatePrompt from "../pwa/PWAUpdatePrompt";
 import OfflineIndicator from "../pwa/OfflineIndicator";
 import { BrandLogo } from "../BrandLogo";
 import { COMPANY_NAME } from "@shared/const";
+import { isInternalRole } from "@shared/roles";
 import "./portal.css";
 
 interface DashboardLayoutProps {
@@ -124,10 +125,10 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       icon: User,
       badge: null,
     },
-    ...(user?.role === "admin"
+    ...(isInternalRole(user?.role)
       ? [
           {
-            name: "Internal ops",
+            name: "Engineering ops",
             href: "/internal",
             icon: BarChart3,
             badge: null as number | null,
