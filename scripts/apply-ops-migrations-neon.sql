@@ -161,12 +161,13 @@ ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "jobTitle" varchar(120);
 
 -- ========== Bootstrap founder as admin (required for /internal/login) ==========
 -- Staff magic links are ONLY sent to users with role admin or staff.
+-- Replace founder@example.com locally before running this statement.
 UPDATE "users"
 SET
   "role" = 'admin',
   "jobTitle" = 'Founder & Lead Engineer',
   "updatedAt" = now()
-WHERE lower("email") = 'hervetshombe@gmail.com';
+WHERE lower("email") = 'founder@example.com';
 
 -- Confirm:
-SELECT id, email, role, "jobTitle" FROM "users" WHERE lower(email) = 'hervetshombe@gmail.com';
+SELECT id, email, role, "jobTitle" FROM "users" WHERE lower(email) = 'founder@example.com';

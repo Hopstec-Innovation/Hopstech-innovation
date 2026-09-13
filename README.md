@@ -106,21 +106,18 @@ http://localhost:5000
 # Explore the new features!
 ```
 
-Copy `.env.example` to `.env` and fill in `DATABASE_URL`, `JWT_SECRET`, `RESEND_API_KEY`, and `APP_URL` for portal go-live.
+Create a private `.env` file and configure the portal variables documented in the internal production runbook.
 
 ## Contact
 
 **HOPSTECH INNOVATION**  
 Professional DevOps & Software Development
 
-- **Headquarters**: 47 Rue Vivienne, 75002 Paris, France
-- **Email**: [hk@hopstecinnovation.com](mailto:hk@hopstecinnovation.com)
-- **Phone**: +33 6 13 97 61 01
 - **Website**: [hopstecinnovation.com](https://hopstecinnovation.com)
 
 ### Business Inquiries
 
-For DevOps consulting, software development services, or partnership opportunities, please reach out via email or phone.
+For DevOps consulting, software development services, or partnership opportunities, use the contact form on the website.
 
 ## License
 
@@ -131,4 +128,3 @@ This project and its contents are proprietary and confidential. Unauthorized cop
 ---
 
 *Built with expertise by Herve Kajingu*
-

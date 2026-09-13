@@ -14,12 +14,17 @@ import {
 } from "@shared/roles";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { Search, Users2, LockKeyhole } from "lucide-react";
 
 const InternalTeamPage = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const utils = trpc.useUtils();
-  const staffQuery = trpc.ops.listStaff.useQuery();
+  const staffQuery = trpc.ops.listStaff.useQuery(undefined, { enabled: isInternalRole(user?.role), retry: false });
+  const workQuery = trpc.ops.listEngagements.useQuery(undefined, { enabled: isInternalRole(user?.role), retry: false, refetchInterval: 15000 });
+  const [search, setSearch] = useState("");
+  const [showProvision, setShowProvision] = useState(false);
+  const [pendingRevoke, setPendingRevoke] = useState<number | null>(null);
   const directoryQuery = trpc.ops.listDirectoryUsers.useQuery(undefined, {
     enabled: isAdmin,
   });
@@ -44,6 +49,7 @@ const InternalTeamPage = () => {
   const setAccess = trpc.ops.setStaffAccess.useMutation({
     onSuccess: () => {
       toast.success("Role updated");
+      setPendingRevoke(null);
       utils.ops.listStaff.invalidate();
       utils.ops.listDirectoryUsers.invalidate();
     },
@@ -52,14 +58,12 @@ const InternalTeamPage = () => {
 
   return (
     <InternalLayout title="Team & roles">
-      <p className="mb-6 max-w-2xl text-sm text-gray-400">
-        Hopstec delivery access uses engineering titles — Solutions Architect,
-        Full-Stack Engineer, DevOps, IoT, Delivery Manager, and related roles.
-        Clients never see these assignments.
-      </p>
+      <div className="ops-heading"><div><p className="ops-eyebrow">People & ownership</p><h1>The team behind delivery.</h1><p>Find engineers, review their active engagements, and manage access to the internal workspace.</p></div>{isAdmin && <button className="ops-button primary" onClick={() => setShowProvision(!showProvision)}><Users2 size={15} />{showProvision ? "Close access form" : "Add teammate"}</button>}</div>
+      <div className="ops-panel"><div className="ops-toolbar"><label className="ops-search"><Search size={16} /><input aria-label="Search team" placeholder="Search people, roles or email…" value={search} onChange={e => setSearch(e.target.value)} /></label><span className="ops-private"><LockKeyhole size={14} />Only admins can change access</span></div></div>
+      {staffQuery.isError && <div className="ops-error" role="alert">Team directory couldn’t be loaded. <button className="ops-button" onClick={() => staffQuery.refetch()}>Retry</button></div>}
 
       <div className="mb-8 grid gap-4 md:grid-cols-2">
-        {(staffQuery.data || []).map((member) => (
+        {(staffQuery.data || []).filter(member => `${member.name} ${member.email} ${member.jobTitle}`.toLowerCase().includes(search.toLowerCase())).map((member) => (
           <Card key={member.id} className="portal-stat-card border-0 shadow-none">
             <CardHeader className="pb-2">
               <CardTitle className="text-base text-white">
@@ -75,6 +79,7 @@ const InternalTeamPage = () => {
                 {accessRoleLabel(member.role)}
               </Badge>
             </CardContent>
+            <div className="border-t border-white/10 mx-6 pb-5 pt-3"><p className="text-xs text-slate-400 mb-2">{workQuery.isError ? "Assignments unavailable" : `${workQuery.data?.filter(p => p.leadAssigneeId === member.id && p.commercialStage !== "closed").length ?? "—"} active engagements`}</p>{workQuery.data?.filter(p => p.leadAssigneeId === member.id && p.commercialStage !== "closed").map(p => <a key={p.id} href={`/internal/projects/${p.id}`} className="block text-xs text-emerald-200 py-1">{p.title} →</a>)}</div>
           </Card>
         ))}
         {staffQuery.isLoading ? <Skeleton className="h-28 w-full" /> : null}
@@ -83,13 +88,13 @@ const InternalTeamPage = () => {
         ) : null}
       </div>
 
-      {isAdmin ? (
+      {isAdmin && showProvision ? (
         <Card className="portal-stat-card mb-8 border-0 shadow-none">
           <CardHeader>
             <CardTitle className="text-white">Provision Hopstec team</CardTitle>
             <p className="text-sm text-gray-400">
               Grants Engineering ops access. The teammate signs in with magic
-              link under “Hopstec team”.
+              link at /internal/login. This route is not linked from the public website.
             </p>
           </CardHeader>
           <CardContent>
@@ -161,11 +166,12 @@ const InternalTeamPage = () => {
         </Card>
       ) : null}
 
+      {isAdmin && directoryQuery.isError && <div className="ops-error" role="alert">Access directory couldn’t be loaded. <button className="ops-button" onClick={() => directoryQuery.refetch()}>Retry</button></div>}
       {isAdmin && directoryQuery.data ? (
         <div>
           <h2 className="mb-3 text-lg font-medium text-white">Directory</h2>
           <div className="space-y-2">
-            {directoryQuery.data.map((row) => (
+            {directoryQuery.data.filter(row => `${row.name} ${row.email}`.toLowerCase().includes(search.toLowerCase())).map((row) => (
               <div
                 key={row.id}
                 className="flex flex-col gap-3 rounded-lg border border-white/10 bg-slate-900/40 px-4 py-3 md:flex-row md:items-center md:justify-between"
@@ -186,6 +192,7 @@ const InternalTeamPage = () => {
                       size="sm"
                       variant="outline"
                       className="border-white/15 text-white"
+                      disabled={setAccess.isPending}
                       onClick={() =>
                         setAccess.mutate({
                           userId: row.id,
@@ -201,15 +208,16 @@ const InternalTeamPage = () => {
                       size="sm"
                       variant="ghost"
                       className="text-gray-400"
+                      disabled={setAccess.isPending || row.id === user?.id}
                       onClick={() =>
-                        setAccess.mutate({
+                        pendingRevoke !== row.id ? setPendingRevoke(row.id) : setAccess.mutate({
                           userId: row.id,
                           role: "client",
                           jobTitle: null,
                         })
                       }
                     >
-                      Revoke to client
+                      {row.id === user?.id ? "Your account" : pendingRevoke === row.id ? "Confirm revoke access" : "Revoke staff access"}
                     </Button>
                   )}
                 </div>

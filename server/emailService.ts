@@ -239,7 +239,7 @@ ${emailCompanyFooter}
 // Send contact form email to admin via Resend
 export async function sendContactEmail(data: ContactEmailData): Promise<void> {
   const resend = getResendClient();
-  const adminEmail = process.env.EMAIL_ADMIN || 'hk@hopstecinnovation.com';
+  const adminEmail = process.env.EMAIL_ADMIN || 'info@hopstecinnovation.com';
   const fromEmail = 'noreply@hopstecinnovation.com';
 
   if (!resend) {
@@ -335,7 +335,7 @@ This email was sent from the ${COMPANY_NAME} contact form.
 // Send project inquiry email to admin via Resend
 export async function sendProjectInquiryEmail(data: ProjectInquiryEmailData): Promise<void> {
   const resend = getResendClient();
-  const adminEmail = process.env.EMAIL_ADMIN || 'hk@hopstecinnovation.com';
+  const adminEmail = process.env.EMAIL_ADMIN || 'info@hopstecinnovation.com';
   const fromEmail = 'noreply@hopstecinnovation.com';
 
   if (!resend) {

@@ -42,11 +42,9 @@ const ClientProjectDetailPage = () => {
     { projectId: projectId! },
     {
       enabled: !!projectId,
-      refetchInterval: (query) =>
-        query.state.data?.run.status === "active" ||
-        query.state.data?.run.status === "paused"
-          ? 5000
-          : false,
+      // Keep listening before the first run exists so staff can start delivery
+      // while the client already has this page open.
+      refetchInterval: 5000,
     }
   );
 
@@ -696,4 +694,3 @@ const ClientProjectDetailPage = () => {
 };
 
 export default ClientProjectDetailPage;
-

@@ -31,6 +31,14 @@ export type LiveRunWithSteps = {
   lastUpdatedAt: Date;
 };
 
+/** Explicitly omit staff audit / operational details from customer payloads. */
+export function toClientLiveRun(bundle: LiveRunWithSteps | null) {
+  if (!bundle) return null;
+  const { notes, createdBy, ...run } = bundle.run;
+  const steps = bundle.steps.map(({ skippedReason, ...step }) => step);
+  return { ...bundle, run, steps, currentStep: steps.find(step => step.id === bundle.currentStep?.id) || null };
+}
+
 function shapeRun(
   run: ProjectLiveRun,
   steps: ProjectLiveStep[],
