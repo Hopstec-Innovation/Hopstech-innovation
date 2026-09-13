@@ -22,6 +22,9 @@ const InvoicesPage = lazy(() => import("./pages/InvoicesPage"));
 const SupportPage = lazy(() => import("./pages/SupportPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage"));
+const InternalEngagementsPage = lazy(() => import("./pages/InternalEngagementsPage"));
+const InternalIntakePage = lazy(() => import("./pages/InternalIntakePage"));
+const InternalProjectPage = lazy(() => import("./pages/InternalProjectPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 function RouteLoader() {
@@ -51,6 +54,9 @@ function Router() {
       <Route path={"/client-portal/profile"}>{() => <ProfilePage />}</Route>
       <Route path={"/client-portal/analytics"}>{() => <AnalyticsPage />}</Route>
       <Route path={"/client-portal"}>{() => <ClientPortalPage />}</Route>
+      <Route path={"/internal/intake"}>{() => <InternalIntakePage />}</Route>
+      <Route path={"/internal/projects/:id"}>{() => <InternalProjectPage />}</Route>
+      <Route path={"/internal"}>{() => <InternalEngagementsPage />}</Route>
       <Route path={"/auth/verify"}>{() => <AuthVerifyPage />}</Route>
       <Route path={"/404"}>{() => <NotFound />}</Route>
       <Route>{() => <NotFound />}</Route>

@@ -46,7 +46,7 @@ const pageTitle = (location: string) => {
 const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const [location, setLocation] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, user } = useAuth();
 
   useEffect(() => {
     if (authLoading) return;
@@ -124,6 +124,16 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       icon: User,
       badge: null,
     },
+    ...(user?.role === "admin"
+      ? [
+          {
+            name: "Internal ops",
+            href: "/internal",
+            icon: BarChart3,
+            badge: null as number | null,
+          },
+        ]
+      : []),
   ];
 
   const isActive = (href: string) => {

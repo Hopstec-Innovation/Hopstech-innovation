@@ -16,6 +16,7 @@ import { Link } from 'wouter';
 import { Skeleton } from '../ui/skeleton';
 import NotificationPermissionPrompt from './NotificationPermissionPrompt';
 import { StatsCardSkeleton, ProjectCardSkeleton } from '../ui/skeletons';
+import LiveTracker from '../project/LiveTracker';
 import './portal.css';
 
 const DashboardOverview = () => {
@@ -24,10 +25,8 @@ const DashboardOverview = () => {
     limit: 5, 
     offset: 0 
   });
-  const { data: notifications, isLoading: notificationsLoading } = trpc.clientPortal.getNotifications.useQuery({ 
-    limit: 5, 
-    offset: 0,
-    unreadOnly: true 
+  const { data: liveRuns } = trpc.liveRun.getMyLiveRuns.useQuery(undefined, {
+    refetchInterval: 5000,
   });
   const { data: activities, isLoading: activitiesLoading } = trpc.clientPortal.getActivityLog.useQuery({ 
     limit: 10, 
@@ -120,6 +119,40 @@ const DashboardOverview = () => {
     <div className="p-6 space-y-6">
       {/* Notification Permission Prompt */}
       <NotificationPermissionPrompt />
+
+      {/* Live Now hero */}
+      {liveRuns && liveRuns.length > 0 ? (
+        <section className="space-y-3">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.18em] text-[var(--hopstec-teal)]">
+                Live now
+              </p>
+              <h2 className="mt-1 text-xl font-medium tracking-tight text-white">
+                What is happening on your projects
+              </h2>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            {liveRuns.map((bundle) => (
+              <Link key={bundle.run.id} href={`/client-portal/projects/${bundle.projectId}`}>
+                <a className="block">
+                  <LiveTracker
+                    compact
+                    projectTitle={bundle.projectTitle}
+                    runTitle={bundle.run.title}
+                    runStatus={bundle.run.status}
+                    percentComplete={bundle.percentComplete}
+                    currentStepLabel={bundle.currentStep?.label}
+                    steps={bundle.steps}
+                    lastUpdatedAt={bundle.lastUpdatedAt}
+                  />
+                </a>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

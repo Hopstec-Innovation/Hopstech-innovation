@@ -62,19 +62,25 @@ const AnalyticsPage = () => {
         <div className="p-6 space-y-6">
           {/* Header */}
           <div>
-            <h1 className="text-3xl font-bold text-white mb-2">Analytics & Insights</h1>
-            <p className="text-gray-400">Track your project metrics and performance</p>
+            <p className="text-xs uppercase tracking-[0.18em] text-[var(--hopstec-teal)]">
+              Analytics
+            </p>
+            <h1 className="mt-2 text-3xl font-medium tracking-tight text-white">
+              Portfolio rollup
+            </h1>
+            <p className="mt-2 text-gray-400">
+              High-level metrics across your engagements. Live step progress lives on the dashboard.
+            </p>
           </div>
 
           {/* Key Metrics */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="bg-slate-900 border-slate-800">
+            <Card className="portal-stat-card border-0 shadow-none">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <div className="p-3 bg-blue-500/20 rounded-lg">
-                    <FolderKanban className="h-6 w-6 text-blue-400" />
+                  <div className="portal-icon-chip">
+                    <FolderKanban className="h-5 w-5" />
                   </div>
-                  <TrendingUp className="h-5 w-5 text-green-400" />
                 </div>
                 <p className="text-sm text-gray-400 mb-1">Total Projects</p>
                 <p className="text-3xl font-bold text-white">{totalProjects}</p>

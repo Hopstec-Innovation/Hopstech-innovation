@@ -43,6 +43,20 @@
       "when": 1767611961811,
       "tag": "0005_flawless_charles_xavier",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1773760000000,
+      "tag": "0006_live_project_tracker",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1773761000000,
+      "tag": "0007_ops_commercial_spine",
+      "breakpoints": true
     }
   ]
 }

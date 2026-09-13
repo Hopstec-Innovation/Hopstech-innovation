@@ -37,6 +37,28 @@ export const statusChangeRequestTypeEnum = pgEnum("status_change_request_type", 
 export const statusChangeRequestStatusEnum = pgEnum("status_change_request_status", ["pending", "approved", "rejected"]);
 export const phaseStatusEnum = pgEnum("phase_status", ["pending", "in_progress", "completed", "skipped"]);
 export const progressCalculationMethodEnum = pgEnum("progress_calculation_method", ["milestone", "phase", "deliverable", "hybrid", "manual"]);
+export const liveRunStatusEnum = pgEnum("live_run_status", ["active", "paused", "completed", "cancelled"]);
+export const liveStepStatusEnum = pgEnum("live_step_status", ["pending", "active", "done", "skipped"]);
+export const commercialStageEnum = pgEnum("commercial_stage", [
+  "intake",
+  "quoting",
+  "awaiting_po",
+  "committed",
+  "in_delivery",
+  "closed",
+]);
+export const engagementDocTypeEnum = pgEnum("engagement_doc_type", [
+  "sow",
+  "rfq",
+  "quotation",
+  "po",
+]);
+export const engagementDocStatusEnum = pgEnum("engagement_doc_status", [
+  "draft",
+  "sent",
+  "received",
+  "approved",
+]);
 
 /**
  * Core user table backing auth flow.
@@ -422,6 +444,16 @@ export const clientProjectsExtended = pgTable("clientProjectsExtended", {
   paymentPlanId: integer("paymentPlanId"), // References paymentPlans.id (no FK to avoid circular dependency)
   lastProgressUpdate: timestamp("lastProgressUpdate", { mode: "date", withTimezone: true }),
   lastProgressUpdateBy: integer("lastProgressUpdateBy").references(() => users.id),
+  // Commercial gate (SOW/RFQ → quotation → PO → commit)
+  commercialStage: commercialStageEnum("commercialStage").default("intake").notNull(),
+  commitDate: timestamp("commitDate", { mode: "date", withTimezone: true }),
+  quotationAcceptedAt: timestamp("quotationAcceptedAt", { mode: "date", withTimezone: true }),
+  poReceivedAt: timestamp("poReceivedAt", { mode: "date", withTimezone: true }),
+  // Internal dispatch (never expose on client selects)
+  serviceLine: varchar("serviceLine", { length: 120 }),
+  department: varchar("department", { length: 120 }),
+  leadAssigneeId: integer("leadAssigneeId").references(() => users.id),
+  internalNotes: text("internalNotes"),
   createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
   completedAt: timestamp("completedAt", { mode: "date", withTimezone: true }),
@@ -430,6 +462,8 @@ export const clientProjectsExtended = pgTable("clientProjectsExtended", {
   statusIdx: index("client_projects_ext_status_idx").on(table.status),
   createdAtIdx: index("client_projects_ext_created_at_idx").on(table.createdAt),
   currentPhaseIdIdx: index("client_projects_ext_current_phase_id_idx").on(table.currentPhaseId),
+  commercialStageIdx: index("client_projects_ext_commercial_stage_idx").on(table.commercialStage),
+  leadAssigneeIdx: index("client_projects_ext_lead_assignee_idx").on(table.leadAssigneeId),
 }));
 
 export type ClientProjectExtended = typeof clientProjectsExtended.$inferSelect;
@@ -801,3 +835,104 @@ export const projectStatusChanges = pgTable("projectStatusChanges", {
 
 export type ProjectStatusChange = typeof projectStatusChanges.$inferSelect;
 export type InsertProjectStatusChange = typeof projectStatusChanges.$inferInsert;
+
+/**
+ * Live project runs — Hopsvoir-style operational progress for client visibility
+ */
+export const projectLiveRuns = pgTable("projectLiveRuns", {
+  id: serial("id").primaryKey(),
+  projectId: integer("projectId")
+    .notNull()
+    .references(() => clientProjectsExtended.id, { onDelete: "cascade" }),
+  title: varchar("title", { length: 255 }).notNull(),
+  status: liveRunStatusEnum("status").default("active").notNull(),
+  currentStepId: integer("currentStepId"),
+  notes: text("notes"),
+  startedAt: timestamp("startedAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+  completedAt: timestamp("completedAt", { mode: "date", withTimezone: true }),
+  createdBy: integer("createdBy").references(() => users.id),
+  updatedAt: timestamp("updatedAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  projectIdIdx: index("project_live_runs_project_id_idx").on(table.projectId),
+  statusIdx: index("project_live_runs_status_idx").on(table.status),
+}));
+
+export type ProjectLiveRun = typeof projectLiveRuns.$inferSelect;
+export type InsertProjectLiveRun = typeof projectLiveRuns.$inferInsert;
+
+/**
+ * Ordered steps within a live run
+ */
+export const projectLiveSteps = pgTable("projectLiveSteps", {
+  id: serial("id").primaryKey(),
+  runId: integer("runId")
+    .notNull()
+    .references(() => projectLiveRuns.id, { onDelete: "cascade" }),
+  label: varchar("label", { length: 255 }).notNull(),
+  description: text("description"),
+  orderIndex: integer("orderIndex").default(0).notNull(),
+  status: liveStepStatusEnum("status").default("pending").notNull(),
+  startedAt: timestamp("startedAt", { mode: "date", withTimezone: true }),
+  completedAt: timestamp("completedAt", { mode: "date", withTimezone: true }),
+  skippedReason: text("skippedReason"),
+  createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  runIdIdx: index("project_live_steps_run_id_idx").on(table.runId),
+  statusIdx: index("project_live_steps_status_idx").on(table.status),
+  orderIdx: index("project_live_steps_order_idx").on(table.orderIndex),
+}));
+
+export type ProjectLiveStep = typeof projectLiveSteps.$inferSelect;
+export type InsertProjectLiveStep = typeof projectLiveSteps.$inferInsert;
+
+/**
+ * Commercial documents: client SOW/RFQ, Hopstec quotation, client PO
+ */
+export const engagementDocuments = pgTable("engagementDocuments", {
+  id: serial("id").primaryKey(),
+  projectId: integer("projectId")
+    .notNull()
+    .references(() => clientProjectsExtended.id, { onDelete: "cascade" }),
+  type: engagementDocTypeEnum("type").notNull(),
+  status: engagementDocStatusEnum("status").default("draft").notNull(),
+  fileName: varchar("fileName", { length: 255 }).notNull(),
+  fileUrl: text("fileUrl").notNull(),
+  version: integer("version").default(1).notNull(),
+  notes: text("notes"),
+  uploadedBy: integer("uploadedBy").references(() => users.id),
+  uploadedByRole: varchar("uploadedByRole", { length: 32 }).default("staff"),
+  createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  projectIdIdx: index("engagement_documents_project_id_idx").on(table.projectId),
+  typeIdx: index("engagement_documents_type_idx").on(table.type),
+  statusIdx: index("engagement_documents_status_idx").on(table.status),
+}));
+
+export type EngagementDocument = typeof engagementDocuments.$inferSelect;
+export type InsertEngagementDocument = typeof engagementDocuments.$inferInsert;
+
+/**
+ * Engagement audit trail (commercial + internal events)
+ */
+export const engagementEvents = pgTable("engagementEvents", {
+  id: serial("id").primaryKey(),
+  projectId: integer("projectId")
+    .notNull()
+    .references(() => clientProjectsExtended.id, { onDelete: "cascade" }),
+  type: varchar("type", { length: 80 }).notNull(),
+  message: text("message").notNull(),
+  isInternal: boolean("isInternal").default(false).notNull(),
+  actorId: integer("actorId").references(() => users.id),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  projectIdIdx: index("engagement_events_project_id_idx").on(table.projectId),
+  typeIdx: index("engagement_events_type_idx").on(table.type),
+  createdAtIdx: index("engagement_events_created_at_idx").on(table.createdAt),
+}));
+
+export type EngagementEvent = typeof engagementEvents.$inferSelect;
+export type InsertEngagementEvent = typeof engagementEvents.$inferInsert;

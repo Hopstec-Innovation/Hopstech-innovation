@@ -335,8 +335,16 @@ export const clientPortalRouter = router({
         .where(eq(projectFiles.projectId, input.id))
         .orderBy(desc(projectFiles.createdAt));
 
+      const {
+        serviceLine: _serviceLine,
+        department: _department,
+        leadAssigneeId: _leadAssigneeId,
+        internalNotes: _internalNotes,
+        ...safeProject
+      } = project;
+
       return {
-        ...project,
+        ...safeProject,
         files,
       };
     }),

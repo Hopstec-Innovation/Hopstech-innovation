@@ -8,6 +8,7 @@ import { Badge } from '../components/ui/badge';
 import { Progress } from '../components/ui/progress';
 import { Skeleton } from '../components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Input } from '../components/ui/input';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import ProjectTimeline from '../components/project/ProjectTimeline';
@@ -17,6 +18,10 @@ import ProjectControlPanel from '../components/project/ProjectControlPanel';
 import ChangeRequestForm from '../components/project/ChangeRequestForm';
 import ProgressBreakdown from '../components/project/ProgressBreakdown';
 import PaymentDashboard from '../components/project/PaymentDashboard';
+import LiveTracker from '../components/project/LiveTracker';
+import CommercialTimeline from '../components/project/CommercialTimeline';
+import WipExportButton from '../components/project/WipExportButton';
+import '@/components/dashboard/portal.css';
 
 const ClientProjectDetailPage = () => {
   const [, params] = useRoute('/client-portal/projects/:id');
@@ -24,6 +29,28 @@ const ClientProjectDetailPage = () => {
   const [milestoneView, setMilestoneView] = useState<'list' | 'timeline'>('timeline');
 
   const { data: project, isLoading } = trpc.clientPortal.getProject.useQuery(
+    { id: projectId! },
+    { enabled: !!projectId }
+  );
+
+  const { data: commercial } = trpc.ops.getCommercialTimeline.useQuery(
+    { projectId: projectId! },
+    { enabled: !!projectId, refetchInterval: 10000 }
+  );
+
+  const { data: liveBundle } = trpc.liveRun.getActiveLiveRun.useQuery(
+    { projectId: projectId! },
+    {
+      enabled: !!projectId,
+      refetchInterval: (query) =>
+        query.state.data?.run.status === "active" ||
+        query.state.data?.run.status === "paused"
+          ? 5000
+          : false,
+    }
+  );
+
+  const { data: kpis } = trpc.ops.getDeliveryKpis.useQuery(
     { projectId: projectId! },
     { enabled: !!projectId }
   );
@@ -37,6 +64,18 @@ const ClientProjectDetailPage = () => {
   const toggleMilestoneMutation = trpc.clientPortal.toggleMilestoneCompletion.useMutation({
     onSuccess: () => {
       utils.clientPortal.getProject.invalidate({ id: projectId! });
+    },
+  });
+
+  const [clientDoc, setClientDoc] = useState({
+    type: "sow" as "sow" | "rfq" | "po",
+    fileName: "",
+    fileUrl: "",
+  });
+  const addDoc = trpc.ops.addDocument.useMutation({
+    onSuccess: () => {
+      utils.ops.getCommercialTimeline.invalidate({ projectId: projectId! });
+      setClientDoc({ type: "sow", fileName: "", fileUrl: "" });
     },
   });
 
@@ -187,6 +226,117 @@ const ClientProjectDetailPage = () => {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Main Content */}
             <div className="lg:col-span-2 space-y-6">
+              {liveBundle ? (
+                <LiveTracker
+                  runTitle={liveBundle.run.title}
+                  runStatus={liveBundle.run.status}
+                  percentComplete={liveBundle.percentComplete}
+                  currentStepLabel={liveBundle.currentStep?.label}
+                  steps={liveBundle.steps}
+                  lastUpdatedAt={liveBundle.lastUpdatedAt}
+                />
+              ) : null}
+
+              {commercial ? (
+                <CommercialTimeline
+                  currentStage={String(
+                    (commercial.project as { commercialStage?: string }).commercialStage ||
+                      "intake"
+                  )}
+                  commitDate={
+                    (commercial.project as { commitDate?: Date | null }).commitDate
+                  }
+                  docs={commercial.docs}
+                  events={commercial.events}
+                />
+              ) : null}
+
+              <Card className="portal-panel border-0 shadow-none">
+                <CardHeader>
+                  <CardTitle className="text-white">Upload SOW / RFQ / PO</CardTitle>
+                  <CardDescription className="text-gray-400">
+                    Share your cahier des charges, RFQ, or approved PO via a document link.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-wrap gap-2">
+                  <select
+                    className="rounded-md border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white"
+                    value={clientDoc.type}
+                    onChange={(e) =>
+                      setClientDoc((d) => ({
+                        ...d,
+                        type: e.target.value as typeof clientDoc.type,
+                      }))
+                    }
+                  >
+                    <option value="sow">SOW</option>
+                    <option value="rfq">RFQ</option>
+                    <option value="po">Approved PO</option>
+                  </select>
+                  <Input
+                    placeholder="File name"
+                    value={clientDoc.fileName}
+                    onChange={(e) =>
+                      setClientDoc((d) => ({ ...d, fileName: e.target.value }))
+                    }
+                    className="max-w-[180px] border-white/10 bg-slate-950 text-white"
+                  />
+                  <Input
+                    placeholder="https://… link"
+                    value={clientDoc.fileUrl}
+                    onChange={(e) =>
+                      setClientDoc((d) => ({ ...d, fileUrl: e.target.value }))
+                    }
+                    className="min-w-[220px] flex-1 border-white/10 bg-slate-950 text-white"
+                  />
+                  <Button
+                    disabled={
+                      !clientDoc.fileName ||
+                      !clientDoc.fileUrl ||
+                      addDoc.isPending ||
+                      !projectId
+                    }
+                    onClick={() =>
+                      addDoc.mutate({
+                        projectId: projectId!,
+                        type: clientDoc.type,
+                        fileName: clientDoc.fileName,
+                        fileUrl: clientDoc.fileUrl,
+                      })
+                    }
+                    className="bg-[var(--hopstec-teal)] text-slate-950 hover:bg-[var(--hopstec-teal)]/90"
+                  >
+                    Upload
+                  </Button>
+                  {projectId ? <WipExportButton projectId={projectId} /> : null}
+                </CardContent>
+              </Card>
+
+              {kpis?.committed ? (
+                <Card className="portal-panel border-0 shadow-none">
+                  <CardContent className="flex flex-wrap gap-6 py-5 text-sm text-gray-300">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.14em] text-gray-500">
+                        Days since commit
+                      </p>
+                      <p className="mt-1 text-2xl font-semibold text-white">
+                        {kpis.daysSinceCommit}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.14em] text-gray-500">
+                        Commit date
+                      </p>
+                      <p className="mt-1 text-white">
+                        {kpis.commitDate
+                          ? new Date(kpis.commitDate).toLocaleDateString()
+                          : "—"}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : null}
+
               {/* Progress Card */}
               <Card className="bg-slate-900 border-slate-800">
                 <CardHeader>
