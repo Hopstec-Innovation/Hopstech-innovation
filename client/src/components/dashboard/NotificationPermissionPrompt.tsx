@@ -4,6 +4,7 @@ import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import { useNotifications } from '../../hooks/useNotifications';
 import { motion, AnimatePresence } from 'framer-motion';
+import './portal.css';
 
 interface NotificationPermissionPromptProps {
   onDismiss?: () => void;
@@ -46,11 +47,11 @@ const NotificationPermissionPrompt = ({ onDismiss }: NotificationPermissionPromp
           exit={{ opacity: 0, y: -20 }}
           transition={{ duration: 0.3 }}
         >
-          <Card className="bg-gradient-to-r from-blue-900/50 to-purple-900/50 border-blue-500/30">
+          <Card className="portal-notice border shadow-none">
             <CardContent className="p-4">
               <div className="flex items-start gap-4">
-                <div className="p-2 bg-blue-500/20 rounded-lg">
-                  <Bell className="h-5 w-5 text-blue-400" />
+                <div className="portal-icon-chip">
+                  <Bell className="h-5 w-5" />
                 </div>
                 
                 <div className="flex-1">
@@ -65,7 +66,7 @@ const NotificationPermissionPrompt = ({ onDismiss }: NotificationPermissionPromp
                     <Button
                       onClick={handleEnable}
                       disabled={isRequesting}
-                      className="bg-blue-600 hover:bg-blue-700 text-white"
+                      className="bg-[var(--hopstec-teal)] text-slate-950 hover:bg-[var(--hopstec-teal)]/90"
                       size="sm"
                     >
                       {isRequesting ? (

@@ -1,5 +1,6 @@
 import { cn } from '../../lib/utils';
 import { BrandLogo } from '../BrandLogo';
+import { COMPANY_NAME } from '@shared/const';
 
 interface LoadingSpinnerProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
@@ -19,7 +20,7 @@ export const LoadingSpinner = ({ size = 'md', className, label = 'Loading...' }:
     <div className="flex items-center justify-center" role="status" aria-label={label}>
       <div
         className={cn(
-          'animate-spin rounded-full border-blue-500 border-t-transparent',
+          'animate-spin rounded-full border-[var(--hopstec-teal)] border-t-transparent',
           sizeClasses[size],
           className
         )}
@@ -41,7 +42,7 @@ export const GradientSpinner = ({ size = 'md', className, label = 'Loading...' }
       <div className="relative">
         <div
           className={cn(
-            'animate-spin rounded-full bg-gradient-to-r from-blue-500 via-purple-500 to-blue-500',
+            'animate-spin rounded-full bg-gradient-to-r from-[var(--hopstec-teal)] via-cyan-400 to-[var(--hopstec-teal)]',
             sizeClasses[size],
             className
           )}
@@ -69,32 +70,28 @@ interface FullScreenLoaderProps {
   message?: string;
 }
 
-export const FullScreenLoader = ({ message = 'Loading HOPSTECH Portal...' }: FullScreenLoaderProps) => {
+export const FullScreenLoader = ({ message = 'Loading Hopstec portal...' }: FullScreenLoaderProps) => {
   return (
-    <div className="fixed inset-0 bg-slate-950 flex items-center justify-center z-50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#070b12]">
       <div className="text-center">
         <div className="mb-6 flex justify-center">
           <div className="relative">
-            {/* Outer spinning gradient ring */}
-            <div className="h-20 w-20 animate-spin rounded-full bg-gradient-to-r from-blue-500 via-purple-500 to-blue-500 p-1">
-              <div className="h-full w-full rounded-full bg-slate-950" />
+            <div className="h-20 w-20 animate-spin rounded-full bg-gradient-to-r from-[var(--hopstec-teal)] via-cyan-400 to-[var(--hopstec-teal)] p-1">
+              <div className="h-full w-full rounded-full bg-[#070b12]" />
             </div>
-            
-            {/* Inner pulsing logo */}
             <div className="absolute inset-0 flex items-center justify-center">
               <BrandLogo size="md" className="animate-pulse shadow-none ring-0" showRing={false} />
             </div>
           </div>
         </div>
-        
-        <h2 className="text-xl font-bold text-white mb-2">HOPSTECH</h2>
-        <p className="text-gray-400 text-sm">{message}</p>
-        
-        {/* Loading dots animation */}
-        <div className="flex justify-center gap-1 mt-4">
-          <div className="h-2 w-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-          <div className="h-2 w-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-          <div className="h-2 w-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+
+        <h2 className="mb-2 text-xl font-semibold tracking-tight text-white">{COMPANY_NAME}</h2>
+        <p className="text-sm text-gray-400">{message}</p>
+
+        <div className="mt-4 flex justify-center gap-1">
+          <div className="h-2 w-2 animate-bounce rounded-full bg-[var(--hopstec-teal)]" style={{ animationDelay: '0ms' }} />
+          <div className="h-2 w-2 animate-bounce rounded-full bg-cyan-400" style={{ animationDelay: '150ms' }} />
+          <div className="h-2 w-2 animate-bounce rounded-full bg-[var(--hopstec-teal)]" style={{ animationDelay: '300ms' }} />
         </div>
       </div>
     </div>
@@ -116,4 +113,3 @@ export const ButtonSpinner = ({ className }: ButtonSpinnerProps) => {
     </div>
   );
 };
-

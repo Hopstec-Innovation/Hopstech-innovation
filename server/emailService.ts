@@ -107,72 +107,69 @@ export async function sendMagicLinkEmail(data: MagicLinkEmailData): Promise<void
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Sign in to HOPSTECH INNOVATION</title>
+      <title>Sign in to ${COMPANY_NAME}</title>
     </head>
-    <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #0f172a;">
-      <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0f172a; padding: 40px 20px;">
+    <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #070b12;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #070b12; padding: 40px 20px;">
         <tr>
           <td align="center">
-            <table width="600" cellpadding="0" cellspacing="0" style="background-color: #1e293b; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
-              <!-- Header -->
+            <table width="600" cellpadding="0" cellspacing="0" style="background-color: #0c121c; border-radius: 16px; overflow: hidden; border: 1px solid #ffffff18;">
               <tr>
-                <td style="background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); padding: 40px 30px; text-align: center;">
-                  <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700;">
-                    HOPSTECH INNOVATION
+                <td style="background-color: #0a101a; padding: 36px 30px; text-align: center; border-bottom: 1px solid #ffffff14;">
+                  <div style="display: inline-block; width: 48px; height: 4px; background-color: #00C896; border-radius: 999px; margin-bottom: 18px;"></div>
+                  <h1 style="margin: 0; color: #ffffff; font-size: 26px; font-weight: 600; letter-spacing: -0.03em;">
+                    ${COMPANY_NAME}
                   </h1>
-                  <p style="margin: 10px 0 0 0; color: #e0e7ff; font-size: 14px;">
-                    Client Portal Access
+                  <p style="margin: 10px 0 0 0; color: #a9e5c7; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase;">
+                    Client portal
                   </p>
                 </td>
               </tr>
-              
-              <!-- Content -->
+
               <tr>
                 <td style="padding: 40px 30px;">
-                  <h2 style="margin: 0 0 20px 0; color: #f1f5f9; font-size: 24px; font-weight: 600;">
-                    Hi ${data.name}! 👋
+                  <h2 style="margin: 0 0 16px 0; color: #f5f7f6; font-size: 22px; font-weight: 600; letter-spacing: -0.02em;">
+                    Hi ${data.name},
                   </h2>
-                  
-                  <p style="margin: 0 0 20px 0; color: #cbd5e1; font-size: 16px; line-height: 1.6;">
-                    Click the button below to securely sign in to your HOPSTECH INNOVATION client portal. This link will expire in <strong style="color: #f1f5f9;">${data.expiresInMinutes} minutes</strong>.
+
+                  <p style="margin: 0 0 20px 0; color: #a2abad; font-size: 16px; line-height: 1.65;">
+                    Use the secure link below to sign in to your ${COMPANY_NAME} client portal. This link expires in <strong style="color: #f5f7f6;">${data.expiresInMinutes} minutes</strong>.
                   </p>
-                  
-                  <!-- CTA Button -->
-                  <table width="100%" cellpadding="0" cellspacing="0" style="margin: 30px 0;">
+
+                  <table width="100%" cellpadding="0" cellspacing="0" style="margin: 28px 0;">
                     <tr>
                       <td align="center">
-                        <a href="${data.magicLink}" style="display: inline-block; padding: 16px 40px; background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); color: #ffffff; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: 600; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);">
-                          Sign In to Client Portal
+                        <a href="${data.magicLink}" style="display: inline-block; padding: 14px 32px; background-color: #00C896; color: #020617; text-decoration: none; border-radius: 10px; font-size: 15px; font-weight: 600;">
+                          Sign in to portal
                         </a>
                       </td>
                     </tr>
                   </table>
-                  
-                  <p style="margin: 30px 0 0 0; color: #94a3b8; font-size: 14px; line-height: 1.6;">
-                    If the button doesn't work, copy and paste this link into your browser:
+
+                  <p style="margin: 24px 0 0 0; color: #8f9a9e; font-size: 13px; line-height: 1.6;">
+                    If the button does not work, copy and paste this link into your browser:
                   </p>
-                  <p style="margin: 10px 0 0 0; padding: 12px; background-color: #0f172a; border-radius: 6px; word-break: break-all;">
-                    <a href="${data.magicLink}" style="color: #60a5fa; text-decoration: none; font-size: 13px;">
+                  <p style="margin: 10px 0 0 0; padding: 12px; background-color: #070b12; border: 1px solid #ffffff12; border-radius: 8px; word-break: break-all;">
+                    <a href="${data.magicLink}" style="color: #a9e5c7; text-decoration: none; font-size: 12px;">
                       ${data.magicLink}
                     </a>
                   </p>
                 </td>
               </tr>
-              
-              <!-- Footer -->
+
               <tr>
-                <td style="padding: 30px; background-color: #0f172a; border-top: 1px solid #334155;">
-                  <p style="margin: 0 0 10px 0; color: #64748b; font-size: 13px; text-align: center;">
-                    This email was sent to <strong style="color: #94a3b8;">${data.to}</strong>
+                <td style="padding: 28px 30px; background-color: #080c14; border-top: 1px solid #ffffff12;">
+                  <p style="margin: 0 0 8px 0; color: #7e898d; font-size: 13px; text-align: center;">
+                    Sent to <strong style="color: #a2abad;">${data.to}</strong>
                   </p>
-                  <p style="margin: 0; color: #64748b; font-size: 13px; text-align: center;">
-                    If you didn't request this email, you can safely ignore it.
+                  <p style="margin: 0; color: #7e898d; font-size: 13px; text-align: center;">
+                    If you did not request this email, you can ignore it.
                   </p>
-                  <p style="margin: 20px 0 0 0; color: #475569; font-size: 12px; text-align: center;">
+                  <p style="margin: 18px 0 0 0; color: #64748b; font-size: 12px; text-align: center;">
                     ${emailCompanyFooter}
                   </p>
-                  <p style="margin: 8px 0 0 0; color: #475569; font-size: 12px; text-align: center;">
-                    © ${new Date().getFullYear()} HOPSTECH INNOVATION. All rights reserved.
+                  <p style="margin: 8px 0 0 0; color: #64748b; font-size: 12px; text-align: center;">
+                    © ${new Date().getFullYear()} ${COMPANY_NAME}. All rights reserved.
                   </p>
                 </td>
               </tr>
@@ -185,18 +182,18 @@ export async function sendMagicLinkEmail(data: MagicLinkEmailData): Promise<void
   `;
 
   const textContent = `
-Hi ${data.name}!
+Hi ${data.name},
 
-Click the link below to sign in to your HOPSTECH INNOVATION client portal:
+Sign in to your ${COMPANY_NAME} client portal:
 
 ${data.magicLink}
 
-This link will expire in ${data.expiresInMinutes} minutes.
+This link expires in ${data.expiresInMinutes} minutes.
 
-If you didn't request this email, you can safely ignore it.
+If you did not request this email, you can ignore it.
 
 ---
-© ${new Date().getFullYear()} HOPSTECH INNOVATION
+© ${new Date().getFullYear()} ${COMPANY_NAME}
 ${emailCompanyFooter}
   `.trim();
 
@@ -206,9 +203,9 @@ ${emailCompanyFooter}
     }
 
     const { data: emailData, error } = await resend.emails.send({
-      from: `HOPSTECH INNOVATION <${fromEmail}>`,
+      from: `${COMPANY_NAME} <${fromEmail}>`,
       to: [data.to],
-      subject: '🔐 Sign in to HOPSTECH INNOVATION Client Portal',
+      subject: `Sign in to ${COMPANY_NAME} Client Portal`,
       text: textContent,
       html: htmlContent,
     });
@@ -278,7 +275,7 @@ export async function sendContactEmail(data: ContactEmailData): Promise<void> {
           <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;">
 
           <p style="color: #666; font-size: 12px; margin: 0;">
-            This email was sent from the HOPSTECH INNOVATION contact form.
+            This email was sent from the ${COMPANY_NAME} contact form.
           </p>
         </div>
       </div>
@@ -299,7 +296,7 @@ Message:
 ${data.message}
 
 ---
-This email was sent from the HOPSTECH INNOVATION contact form.
+This email was sent from the ${COMPANY_NAME} contact form.
   `.trim();
 
   try {
@@ -311,7 +308,7 @@ This email was sent from the HOPSTECH INNOVATION contact form.
     });
 
     const { data: emailData, error } = await resend.emails.send({
-      from: `HOPSTECH INNOVATION <${fromEmail}>`,
+      from: `${COMPANY_NAME} <${fromEmail}>`,
       to: [adminEmail],
       replyTo: data.email,
       subject: `Contact Form: ${data.subject}`,
@@ -380,7 +377,7 @@ export async function sendProjectInquiryEmail(data: ProjectInquiryEmailData): Pr
           <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;">
 
           <p style="color: #666; font-size: 12px; margin: 0;">
-            This email was sent from the HOPSTECH INNOVATION client portal.
+            This email was sent from the ${COMPANY_NAME} client portal.
           </p>
         </div>
       </div>
@@ -405,7 +402,7 @@ Description:
 ${data.description}
 
 ---
-This email was sent from the HOPSTECH INNOVATION client portal.
+This email was sent from the ${COMPANY_NAME} client portal.
   `.trim();
 
   try {
@@ -417,7 +414,7 @@ This email was sent from the HOPSTECH INNOVATION client portal.
     });
 
     const { data: emailData, error } = await resend.emails.send({
-      from: `HOPSTECH INNOVATION <${fromEmail}>`,
+      from: `${COMPANY_NAME} <${fromEmail}>`,
       to: [adminEmail],
       replyTo: data.email,
       subject: `Project Inquiry: ${data.projectType} - ${data.name}`,

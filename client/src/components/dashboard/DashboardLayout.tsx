@@ -1,34 +1,47 @@
-import { ReactNode, useEffect, useState } from 'react';
-import { Link, useLocation } from 'wouter';
+import { ReactNode, useEffect, useState } from "react";
+import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard,
   FolderKanban,
   MessageSquare,
   FileText,
   User,
-  Bell,
   LogOut,
   Menu,
   X,
   LifeBuoy,
-  BarChart3
-} from 'lucide-react';
-import { Button } from '../ui/button';
-import { Badge } from '../ui/badge';
-import { trpc } from '../../lib/trpc';
-import { toast } from 'sonner';
-import { cn } from '../../lib/utils';
-import { useAuth } from '../../hooks/useAuth';
-import { getClientPortalLoginPath } from '../../const';
-import { FullScreenLoader } from '../ui/loading-spinner';
-import NotificationCenter from './NotificationCenter';
-import PWAInstallPrompt from '../pwa/PWAInstallPrompt';
-import PWAUpdatePrompt from '../pwa/PWAUpdatePrompt';
-import OfflineIndicator from '../pwa/OfflineIndicator';
+  BarChart3,
+} from "lucide-react";
+import { Button } from "../ui/button";
+import { Badge } from "../ui/badge";
+import { trpc } from "../../lib/trpc";
+import { toast } from "sonner";
+import { cn } from "../../lib/utils";
+import { useAuth } from "../../hooks/useAuth";
+import { getClientPortalLoginPath } from "../../const";
+import { FullScreenLoader } from "../ui/loading-spinner";
+import NotificationCenter from "./NotificationCenter";
+import PWAInstallPrompt from "../pwa/PWAInstallPrompt";
+import PWAUpdatePrompt from "../pwa/PWAUpdatePrompt";
+import OfflineIndicator from "../pwa/OfflineIndicator";
+import { BrandLogo } from "../BrandLogo";
+import { COMPANY_NAME } from "@shared/const";
+import "./portal.css";
 
 interface DashboardLayoutProps {
   children: ReactNode;
 }
+
+const pageTitle = (location: string) => {
+  if (location === "/client-portal") return "Dashboard";
+  if (location.startsWith("/client-portal/projects")) return "Projects";
+  if (location.startsWith("/client-portal/messages")) return "Messages";
+  if (location.startsWith("/client-portal/invoices")) return "Invoices";
+  if (location.startsWith("/client-portal/support")) return "Support";
+  if (location.startsWith("/client-portal/analytics")) return "Analytics";
+  if (location.startsWith("/client-portal/profile")) return "Profile";
+  return "Client portal";
+};
 
 const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const [location, setLocation] = useLocation();
@@ -42,30 +55,26 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
     setLocation(getClientPortalLoginPath());
   }, [authLoading, isAuthenticated, location, setLocation]);
 
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location]);
+
   const { data: stats } = trpc.clientPortal.getDashboardStats.useQuery(undefined, {
     enabled: isAuthenticated,
   });
-  const { data: notifications } = trpc.clientPortal.getNotifications.useQuery(
-    {
-      limit: 5,
-      offset: 0,
-      unreadOnly: true,
-    },
-    { enabled: isAuthenticated }
-  );
 
   const logoutMutation = trpc.magicLink.logout.useMutation({
     onSuccess: () => {
-      toast.success('Logged out successfully');
+      toast.success("Logged out successfully");
       window.location.href = getClientPortalLoginPath();
     },
     onError: () => {
-      toast.error('Failed to logout');
+      toast.error("Failed to logout");
     },
   });
 
   if (authLoading) {
-    return <FullScreenLoader message="Loading HOPSTECH Portal..." />;
+    return <FullScreenLoader message="Loading Hopstec portal..." />;
   }
 
   if (!isAuthenticated) {
@@ -74,167 +83,179 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
 
   const navItems = [
     {
-      name: 'Dashboard',
-      href: '/client-portal',
+      name: "Dashboard",
+      href: "/client-portal",
       icon: LayoutDashboard,
-      badge: null,
+      badge: null as number | null,
     },
     {
-      name: 'Projects',
-      href: '/client-portal/projects',
+      name: "Projects",
+      href: "/client-portal/projects",
       icon: FolderKanban,
       badge: stats?.projects.active || 0,
     },
     {
-      name: 'Messages',
-      href: '/client-portal/messages',
+      name: "Messages",
+      href: "/client-portal/messages",
       icon: MessageSquare,
       badge: stats?.messages.unread || 0,
     },
     {
-      name: 'Invoices',
-      href: '/client-portal/invoices',
+      name: "Invoices",
+      href: "/client-portal/invoices",
       icon: FileText,
       badge: stats?.invoices.pending || 0,
     },
     {
-      name: 'Support',
-      href: '/client-portal/support',
+      name: "Support",
+      href: "/client-portal/support",
       icon: LifeBuoy,
       badge: stats?.tickets.open || 0,
     },
     {
-      name: 'Analytics',
-      href: '/client-portal/analytics',
+      name: "Analytics",
+      href: "/client-portal/analytics",
       icon: BarChart3,
       badge: null,
     },
     {
-      name: 'Profile',
-      href: '/client-portal/profile',
+      name: "Profile",
+      href: "/client-portal/profile",
       icon: User,
       badge: null,
     },
   ];
 
   const isActive = (href: string) => {
-    if (href === '/client-portal') {
+    if (href === "/client-portal") {
       return location === href;
     }
     return location.startsWith(href);
   };
 
+  const renderNav = (onNavigate?: () => void) =>
+    navItems.map((item) => {
+      const Icon = item.icon;
+      const active = isActive(item.href);
+
+      return (
+        <Link key={item.name} href={item.href}>
+          <a
+            className={cn("portal-nav-link", active && "is-active")}
+            onClick={onNavigate}
+          >
+            <span className="portal-nav-link-main">
+              <Icon className="h-4 w-4" />
+              {item.name}
+            </span>
+            {item.badge !== null && item.badge > 0 ? (
+              <Badge className="h-5 min-w-5 border-0 bg-[var(--hopstec-teal)] px-1.5 text-slate-950">
+                {item.badge}
+              </Badge>
+            ) : null}
+          </a>
+        </Link>
+      );
+    });
+
+  const brandBlock = (
+    <Link href="/">
+      <a className="portal-brand">
+        <BrandLogo size="sm" showRing={false} />
+        <span className="portal-brand-text">
+          <span className="portal-brand-name">{COMPANY_NAME}</span>
+          <span className="portal-brand-sub">Client portal</span>
+        </span>
+      </a>
+    </Link>
+  );
+
   return (
-    <div className="min-h-screen bg-slate-950 flex">
-      {/* Sidebar - Desktop */}
-      <aside className="hidden lg:flex lg:flex-col lg:w-64 bg-slate-900 border-r border-slate-800">
-        <div className="p-6 border-b border-slate-800">
-          <Link href="/">
-            <a className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-xl">H</span>
-              </div>
-              <div>
-                <h2 className="text-white font-bold text-lg">HOPSTECH</h2>
-                <p className="text-gray-400 text-xs">Client Portal</p>
-              </div>
-            </a>
-          </Link>
-        </div>
-
-        <nav className="flex-1 p-4 space-y-2">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const active = isActive(item.href);
-            
-            return (
-              <Link key={item.name} href={item.href}>
-                <a
-                  className={cn(
-                    "flex items-center justify-between px-4 py-3 rounded-lg transition-all",
-                    active
-                      ? "bg-blue-600 text-white"
-                      : "text-gray-400 hover:bg-slate-800 hover:text-white"
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    <Icon className="h-5 w-5" />
-                    <span className="font-medium">{item.name}</span>
-                  </div>
-                  {item.badge !== null && item.badge > 0 && (
-                    <Badge className="bg-red-500 text-white border-0 h-5 min-w-5 px-1.5">
-                      {item.badge}
-                    </Badge>
-                  )}
-                </a>
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div className="p-4 border-t border-slate-800">
+    <div className="portal-shell">
+      <aside className="portal-sidebar">
+        {brandBlock}
+        <nav className="portal-nav">{renderNav()}</nav>
+        <div className="portal-sidebar-footer">
           <Button
             onClick={() => logoutMutation.mutate()}
             variant="ghost"
-            className="w-full justify-start text-gray-400 hover:text-white hover:bg-slate-800"
+            className="w-full justify-start text-gray-400 hover:bg-white/5 hover:text-white"
             disabled={logoutMutation.isPending}
           >
-            <LogOut className="h-5 w-5 mr-3" />
-            Logout
+            <LogOut className="mr-3 h-4 w-4" />
+            Log out
           </Button>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col">
-        {/* Top Bar - Desktop */}
-        <header className="hidden lg:flex bg-slate-900 border-b border-slate-800 px-6 py-4 items-center justify-between">
-          <div>
-            <h1 className="text-white font-semibold text-lg">
-              {location === '/client-portal' && 'Dashboard'}
-              {location.startsWith('/client-portal/projects') && 'Projects'}
-              {location.startsWith('/client-portal/messages') && 'Messages'}
-              {location.startsWith('/client-portal/invoices') && 'Invoices'}
-              {location.startsWith('/client-portal/support') && 'Support'}
-              {location.startsWith('/client-portal/analytics') && 'Analytics'}
-              {location.startsWith('/client-portal/profile') && 'Profile'}
-            </h1>
-          </div>
-          <div className="flex items-center gap-3">
+      <div className="portal-main">
+        <header className="portal-topbar">
+          <h1 className="portal-topbar-title">{pageTitle(location)}</h1>
+          <NotificationCenter />
+        </header>
+
+        <header className="portal-mobile-bar">
+          <Link href="/">
+            <a className="flex items-center gap-2">
+              <BrandLogo size="xs" showRing={false} />
+              <span className="text-sm font-semibold text-white">Hopstec</span>
+            </a>
+          </Link>
+          <div className="flex items-center gap-1">
+            <OfflineIndicator />
             <NotificationCenter />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSidebarOpen(true)}
+              className="text-white"
+              aria-label="Open menu"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
           </div>
         </header>
 
-        {/* Top Bar - Mobile */}
-        <header className="lg:hidden bg-slate-900 border-b border-slate-800 p-4">
-          <div className="flex items-center justify-between">
-            <Link href="/">
-              <a className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                  <span className="text-white font-bold">H</span>
-                </div>
-                <span className="text-white font-bold">HOPSTECH</span>
-              </a>
-            </Link>
-            <div className="flex items-center gap-2">
-              <OfflineIndicator />
-              <NotificationCenter />
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="text-white"
-              >
-                {sidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-              </Button>
+        {sidebarOpen ? (
+          <div className="portal-mobile-drawer lg:hidden">
+            <button
+              type="button"
+              className="portal-mobile-drawer-backdrop"
+              aria-label="Close menu"
+              onClick={() => setSidebarOpen(false)}
+            />
+            <div className="portal-mobile-drawer-panel">
+              <div className="flex items-center justify-between border-b border-white/10 pr-2">
+                {brandBlock}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSidebarOpen(false)}
+                  className="text-white"
+                  aria-label="Close menu"
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+              <nav className="portal-nav">{renderNav(() => setSidebarOpen(false))}</nav>
+              <div className="portal-sidebar-footer">
+                <Button
+                  onClick={() => logoutMutation.mutate()}
+                  variant="ghost"
+                  className="w-full justify-start text-gray-400 hover:bg-white/5 hover:text-white"
+                  disabled={logoutMutation.isPending}
+                >
+                  <LogOut className="mr-3 h-4 w-4" />
+                  Log out
+                </Button>
+              </div>
             </div>
           </div>
-        </header>
+        ) : null}
 
         {children}
       </div>
 
-      {/* PWA Components */}
       <PWAInstallPrompt />
       <PWAUpdatePrompt />
     </div>
@@ -242,4 +263,3 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
 };
 
 export default DashboardLayout;
-

@@ -118,7 +118,7 @@ const PWAInstallPrompt = () => {
               
               <div className="flex-1">
                 <h3 className="text-lg font-bold text-white mb-1">
-                  Install HOPSTECH Portal
+                  Install Hopstec portal
                 </h3>
                 <p className="text-sm text-blue-100 mb-4">
                   Install our app for quick access, offline support, and a native experience!

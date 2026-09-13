@@ -41,7 +41,7 @@ const PWAUpdatePrompt = () => {
                       Update Available
                     </h3>
                     <p className="text-sm text-gray-400 mb-4">
-                      A new version of HOPSTECH Portal is available. Update now to get the latest features!
+                      A new version of the Hopstec portal is available. Update now to get the latest features!
                     </p>
 
                     <div className="flex gap-2">
@@ -69,7 +69,7 @@ const PWAUpdatePrompt = () => {
                       App Ready for Offline Use
                     </h3>
                     <p className="text-sm text-gray-400 mb-4">
-                      HOPSTECH Portal is now available offline!
+                      Hopstec portal is now available offline!
                     </p>
 
                     <Button

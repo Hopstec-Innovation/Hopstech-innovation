@@ -6,13 +6,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { Label } from '../components/ui/label';
-import { Badge } from '../components/ui/badge';
 import { trpc } from '../lib/trpc';
 import { toast } from 'sonner';
 import { useAuth } from '../hooks/useAuth';
 import DashboardLayout from '../components/dashboard/DashboardLayout';
 import DashboardOverview from '../components/dashboard/DashboardOverview';
 import { FullScreenLoader } from '../components/ui/loading-spinner';
+import { COMPANY_NAME } from '@shared/const';
+import '../components/dashboard/portal.css';
 
 const ClientPortalPage = () => {
   const { isAuthenticated, user, isLoading: authLoading } = useAuth();
@@ -80,22 +81,22 @@ const ClientPortalPage = () => {
 
   const features = [
     {
-      icon: <Rocket className="h-6 w-6 text-blue-400" />,
+      icon: <Rocket className="h-6 w-6 text-[var(--hopstec-teal)]" />,
       title: 'Project Collaboration',
       description: 'Submit project inquiries and collaborate directly with our team',
     },
     {
-      icon: <TrendingUp className="h-6 w-6 text-purple-400" />,
+      icon: <TrendingUp className="h-6 w-6 text-[var(--hopstec-teal)]" />,
       title: 'Real-Time Progress',
       description: 'Track your project milestones and progress in real-time',
     },
     {
-      icon: <CheckCircle2 className="h-6 w-6 text-green-400" />,
+      icon: <CheckCircle2 className="h-6 w-6 text-[var(--hopstec-teal)]" />,
       title: 'Project Updates',
       description: 'Receive detailed updates and insights on your active projects',
     },
     {
-      icon: <Clock className="h-6 w-6 text-orange-400" />,
+      icon: <Clock className="h-6 w-6 text-[var(--hopstec-teal)]" />,
       title: 'Fast Response',
       description: 'Get quick responses and dedicated support throughout your project',
     },
@@ -112,7 +113,7 @@ const ClientPortalPage = () => {
 
   // Loading state
   if (authLoading) {
-    return <FullScreenLoader message="Loading HOPSTECH Portal..." />;
+    return <FullScreenLoader message="Loading Hopstec portal..." />;
   }
 
   // Authenticated - Show Dashboard
@@ -121,12 +122,12 @@ const ClientPortalPage = () => {
       <DashboardLayout>
         <main className="flex-1 overflow-y-auto">
           <div className="p-6">
-            <div className="mb-6">
-              <h1 className="text-3xl font-bold text-white mb-2">
-                Welcome back, {user.name}!
+            <div className="mb-8">
+              <h1 className="portal-welcome-title">
+                Welcome back, {user.name}
               </h1>
-              <p className="text-gray-400">
-                Here's what's happening with your projects today
+              <p className="portal-welcome-lede">
+                Here is what is happening across your projects today.
               </p>
             </div>
             <DashboardOverview />
@@ -139,43 +140,38 @@ const ClientPortalPage = () => {
   // Not authenticated - Show Login/Registration Form
   return (
     <PageLayout>
-      {/* Hero Section */}
-      <section className="relative min-h-[60vh] flex items-center justify-center overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 via-slate-950 to-purple-900/20" />
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000_70%,transparent_110%)]" />
-
-        <div className="container mx-auto px-4 relative z-10">
-          <div className="max-w-4xl mx-auto text-center">
-            <Badge variant="outline" className="text-blue-400 border-blue-400 px-4 py-2 text-sm mb-6">
-              Client Collaboration Portal
-            </Badge>
-            
-            <h1 className="text-5xl md:text-7xl font-bold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400">
-              Let's Build Something Amazing Together
+      <section className="portal-login-hero">
+        <div className="container relative z-10 mx-auto px-4">
+          <div className="mx-auto max-w-3xl text-center">
+            <p className="portal-login-kicker">
+              <i aria-hidden="true" />
+              {COMPANY_NAME} · Client portal
+            </p>
+            <h1 className="mb-5 text-4xl font-medium tracking-tight text-white md:text-5xl">
+              Access your <em className="font-serif italic text-[#b6e6cd]">dashboard</em>
             </h1>
-            
-            <p className="text-xl md:text-2xl text-gray-300 mb-8 max-w-2xl mx-auto">
-              Whether you're a business, startup, freelancer, or individual - your gateway to seamless project collaboration and expert DevOps solutions.
+            <p className="mx-auto max-w-2xl text-lg leading-7 text-gray-400">
+              Passwordless sign-in for clients. Track projects, messages, and invoices in one place.
             </p>
           </div>
         </div>
       </section>
 
       {/* Features Section */}
-      <section className="py-20 bg-slate-900/50">
+      <section className="border-b border-white/5 py-16">
         <div className="container mx-auto px-4">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-              Why Choose Our Client Portal?
+          <div className="mb-10 text-center">
+            <h2 className="mb-3 text-3xl font-medium tracking-tight text-white md:text-4xl">
+              Built for client visibility
             </h2>
-            <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-              Experience a modern, transparent approach to project development
+            <p className="mx-auto max-w-2xl text-gray-400">
+              A quieter, clearer workspace for the work we ship together.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
+          <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
             {features.map((feature, index) => (
-              <Card key={index} className="bg-slate-800/50 border-slate-700 hover:border-blue-500/50 transition-all">
+              <Card key={index} className="border-white/10 bg-slate-900/40 shadow-none">
                 <CardHeader>
                   <div className="mb-4">{feature.icon}</div>
                   <CardTitle className="text-white">{feature.title}</CardTitle>
@@ -190,68 +186,65 @@ const ClientPortalPage = () => {
       </section>
 
       {/* Client Login Section */}
-      <section className="py-20 bg-slate-900/30">
+      <section className="py-16 md:py-20">
         <div className="container mx-auto px-4">
-          <div className="max-w-md mx-auto">
-            <div className="text-center mb-8">
-              <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-                Access Your Dashboard
+          <div className="mx-auto max-w-md">
+            <div className="mb-8 text-center">
+              <h2 className="mb-3 text-3xl font-medium tracking-tight text-white">
+                Sign in
               </h2>
-              <p className="text-gray-400 text-lg">
-                Sign in or create an account - no password needed!
+              <p className="text-gray-400">
+                Enter your email — we will send a secure link. No password needed.
               </p>
             </div>
 
-            <Card className="bg-slate-800/50 border-slate-700">
+            <Card className="border-white/10 bg-slate-900/50 shadow-none">
               <CardHeader>
-                <CardTitle className="text-white flex items-center gap-2">
-                  <LogIn className="h-5 w-5 text-blue-400" />
-                  Passwordless Sign In
+                <CardTitle className="flex items-center gap-2 text-white">
+                  <LogIn className="h-5 w-5 text-[var(--hopstec-teal)]" />
+                  Passwordless sign-in
                 </CardTitle>
                 <CardDescription className="text-gray-400">
-                  Enter your email and we'll send you a secure link. New users will automatically get an account!
+                  New clients automatically get an account on first successful sign-in.
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {magicLinkSent ? (
                   <div className="space-y-4">
-                    <div className="p-4 bg-green-900/20 border border-green-700 rounded-lg">
+                    <div className="portal-success">
                       <div className="flex items-start gap-3">
-                        <div className="flex-shrink-0 mt-0.5">
-                          <svg className="h-5 w-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </div>
+                        <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-[var(--hopstec-teal)]" />
                         <div className="flex-1">
-                          <h3 className="text-white font-semibold mb-1">Magic Link Sent!</h3>
-                          <p className="text-gray-300 text-sm mb-2">
-                            We've sent a secure sign-in link to <strong className="text-white">{magicLinkEmail}</strong>
+                          <h3 className="mb-1 font-semibold text-white">Magic link sent</h3>
+                          <p className="mb-2 text-sm text-gray-300">
+                            We sent a secure sign-in link to{" "}
+                            <strong className="text-white">{magicLinkEmail}</strong>
                           </p>
-                          <p className="text-gray-400 text-xs">
-                            Check your inbox and click the link to access your client portal. The link will expire in 15 minutes.
+                          <p className="text-xs text-gray-400">
+                            Check your inbox and open the link within 15 minutes.
                           </p>
                         </div>
                       </div>
                     </div>
 
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <Button
                         onClick={() => {
                           magicLinkMutation.mutate({ email: magicLinkEmail, name: magicLinkName });
                         }}
                         variant="outline"
-                        className="flex-1 border-slate-700 text-white hover:bg-slate-800"
+                        className="flex-1 border-white/15 text-white hover:bg-white/5"
                         disabled={magicLinkMutation.isPending}
                       >
                         {magicLinkMutation.isPending ? (
                           <>
-                            <span className="animate-spin mr-2">⏳</span>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             Resending...
                           </>
                         ) : (
                           <>
                             <Mail className="mr-2 h-4 w-4" />
-                            Resend Link
+                            Resend link
                           </>
                         )}
                       </Button>
@@ -263,9 +256,9 @@ const ClientPortalPage = () => {
                           setMagicLinkName('');
                         }}
                         variant="ghost"
-                        className="text-gray-400 hover:text-white hover:bg-slate-800"
+                        className="text-gray-400 hover:bg-white/5 hover:text-white"
                       >
-                        Use Different Email
+                        Use a different email
                       </Button>
                     </div>
                   </div>
@@ -273,21 +266,21 @@ const ClientPortalPage = () => {
                   <form onSubmit={handleMagicLinkSubmit} className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="magicLinkName" className="text-white">
-                        Your Name
+                        Your name
                       </Label>
                       <Input
                         id="magicLinkName"
                         type="text"
                         value={magicLinkName}
                         onChange={(e) => setMagicLinkName(e.target.value)}
-                        className="bg-slate-900 border-slate-700 text-white"
-                        placeholder="John Doe"
+                        className="border-white/10 bg-slate-950 text-white"
+                        placeholder="Your name"
                       />
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="magicLinkEmail" className="text-white">
-                        Email Address <span className="text-red-500">*</span>
+                        Email address <span className="text-red-500">*</span>
                       </Label>
                       <Input
                         id="magicLinkEmail"
@@ -295,25 +288,25 @@ const ClientPortalPage = () => {
                         value={magicLinkEmail}
                         onChange={(e) => setMagicLinkEmail(e.target.value)}
                         required
-                        className="bg-slate-900 border-slate-700 text-white"
-                        placeholder="your@email.com"
+                        className="border-white/10 bg-slate-950 text-white"
+                        placeholder="you@company.com"
                       />
                     </div>
 
                     <Button
                       type="submit"
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                      className="w-full bg-[var(--hopstec-teal)] text-slate-950 hover:bg-[var(--hopstec-teal)]/90"
                       disabled={magicLinkMutation.isPending}
                     >
                       {magicLinkMutation.isPending ? (
                         <>
-                          <span className="animate-spin mr-2">⏳</span>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           Sending...
                         </>
                       ) : (
                         <>
                           <Mail className="mr-2 h-4 w-4" />
-                          Send Magic Link
+                          Send magic link
                         </>
                       )}
                     </Button>
@@ -414,7 +407,7 @@ const ClientPortalPage = () => {
                           value={formData.phone}
                           onChange={handleChange}
                           className="bg-slate-900 border-slate-700 text-white pl-10"
-                          placeholder="+1 (555) 000-0000"
+                          placeholder="+33 6 00 00 00 00"
                         />
                         <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                       </div>
@@ -488,7 +481,7 @@ const ClientPortalPage = () => {
                   <Button
                     type="submit"
                     size="lg"
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                    className="w-full bg-[var(--hopstec-teal)] text-slate-950 hover:bg-[var(--hopstec-teal)]/90"
                     disabled={inquiryMutation.isPending}
                   >
                     {inquiryMutation.isPending ? (

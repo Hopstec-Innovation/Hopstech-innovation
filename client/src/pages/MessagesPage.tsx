@@ -117,7 +117,7 @@ const MessagesPage = () => {
                             "font-medium",
                             !message.isRead ? "text-white" : "text-gray-400"
                           )}>
-                            {message.senderName || 'HOPSTECH Team'}
+                            {message.senderName || 'Hopstec Team'}
                           </span>
                         </div>
                         {!message.isRead && (
@@ -161,7 +161,7 @@ const MessagesPage = () => {
                       <User className="h-5 w-5 text-blue-400" />
                     </div>
                     <div>
-                      <h2 className="text-lg font-semibold text-white">HOPSTECH Team</h2>
+                      <h2 className="text-lg font-semibold text-white">Hopstec Team</h2>
                       <p className="text-sm text-gray-400">Online</p>
                     </div>
                   </div>
@@ -179,7 +179,7 @@ const MessagesPage = () => {
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-1">
                               <span className="font-medium text-white text-sm">
-                                {message.senderName || 'HOPSTECH Team'}
+                                {message.senderName || 'Hopstec Team'}
                               </span>
                               <span className="text-xs text-gray-500">
                                 {new Date(message.createdAt).toLocaleString()}
@@ -219,7 +219,7 @@ const MessagesPage = () => {
                   <CardHeader>
                     <CardTitle className="text-white">Send a Message</CardTitle>
                     <CardDescription className="text-gray-400">
-                      Start a conversation with the HOPSTECH team
+                      Start a conversation with the Hopstec team
                     </CardDescription>
                   </CardHeader>
                   <CardContent>

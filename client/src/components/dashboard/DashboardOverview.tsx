@@ -16,6 +16,7 @@ import { Link } from 'wouter';
 import { Skeleton } from '../ui/skeleton';
 import NotificationPermissionPrompt from './NotificationPermissionPrompt';
 import { StatsCardSkeleton, ProjectCardSkeleton } from '../ui/skeletons';
+import './portal.css';
 
 const DashboardOverview = () => {
   const { data: stats, isLoading: statsLoading } = trpc.clientPortal.getDashboardStats.useQuery();
@@ -39,7 +40,6 @@ const DashboardOverview = () => {
       value: stats?.projects.active || 0,
       total: stats?.projects.total || 0,
       icon: FolderKanban,
-      color: 'blue',
       description: `${stats?.projects.completed || 0} completed`,
       href: '/client-portal/projects',
     },
@@ -47,7 +47,6 @@ const DashboardOverview = () => {
       title: 'Unread Messages',
       value: stats?.messages.unread || 0,
       icon: MessageSquare,
-      color: 'purple',
       description: 'New messages',
       href: '/client-portal/messages',
     },
@@ -55,7 +54,6 @@ const DashboardOverview = () => {
       title: 'Pending Invoices',
       value: stats?.invoices.pending || 0,
       icon: FileText,
-      color: 'green',
       description: `${stats?.invoices.overdue || 0} overdue`,
       href: '/client-portal/invoices',
     },
@@ -63,20 +61,16 @@ const DashboardOverview = () => {
       title: 'Open Tickets',
       value: stats?.tickets.open || 0,
       icon: AlertCircle,
-      color: 'orange',
       description: 'Support tickets',
       href: '/client-portal/support',
     },
   ];
 
-  const getColorClasses = (color: string) => {
-    const colors = {
-      blue: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-      purple: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-      green: 'bg-green-500/20 text-green-400 border-green-500/30',
-      orange: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-    };
-    return colors[color as keyof typeof colors] || colors.blue;
+  const statusClass = (status: string) => {
+    if (status === 'completed') return 'border-[var(--hopstec-teal)]/30 bg-[var(--hopstec-teal)]/10 text-[var(--hopstec-teal)]';
+    if (status === 'in_progress') return 'border-sky-500/30 bg-sky-500/10 text-sky-300';
+    if (status === 'on_hold') return 'border-amber-500/30 bg-amber-500/10 text-amber-300';
+    return 'border-white/15 bg-white/5 text-gray-300';
   };
 
   if (statsLoading) {
@@ -90,7 +84,7 @@ const DashboardOverview = () => {
         </div>
 
         {/* Recent Projects Skeleton */}
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="bg-slate-900/60 border-white/10">
           <CardHeader>
             <Skeleton className="h-6 w-48" />
           </CardHeader>
@@ -102,7 +96,7 @@ const DashboardOverview = () => {
         </Card>
 
         {/* Activity Feed Skeleton */}
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="bg-slate-900/60 border-white/10">
           <CardHeader>
             <Skeleton className="h-6 w-48" />
           </CardHeader>
@@ -128,26 +122,26 @@ const DashboardOverview = () => {
       <NotificationPermissionPrompt />
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map((stat) => {
           const Icon = stat.icon;
           return (
             <Link key={stat.title} href={stat.href}>
               <a>
-                <Card className="bg-slate-900 border-slate-800 hover:border-blue-500/50 transition-all cursor-pointer">
+                <Card className="portal-stat-card cursor-pointer border-0 shadow-none">
                   <CardHeader className="flex flex-row items-center justify-between pb-2">
                     <CardTitle className="text-sm font-medium text-gray-400">
                       {stat.title}
                     </CardTitle>
-                    <div className={`p-2 rounded-lg ${getColorClasses(stat.color)}`}>
+                    <div className="portal-icon-chip">
                       <Icon className="h-4 w-4" />
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-3xl font-bold text-white mb-1">
+                    <div className="mb-1 text-3xl font-semibold tracking-tight text-white">
                       {stat.value}
                       {stat.total !== undefined && (
-                        <span className="text-lg text-gray-500 ml-2">/ {stat.total}</span>
+                        <span className="ml-2 text-lg text-gray-500">/ {stat.total}</span>
                       )}
                     </div>
                     <p className="text-xs text-gray-500">{stat.description}</p>
@@ -162,13 +156,13 @@ const DashboardOverview = () => {
       {/* Recent Projects & Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Projects */}
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="portal-panel border-0 shadow-none">
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="text-white">Recent Projects</CardTitle>
               <Link href="/client-portal/projects">
                 <a>
-                  <Button variant="ghost" size="sm" className="text-blue-400 hover:text-blue-300">
+                  <Button variant="ghost" size="sm" className="text-[var(--hopstec-teal)] hover:text-[var(--hopstec-teal)]/80">
                     View All
                   </Button>
                 </a>
@@ -189,14 +183,10 @@ const DashboardOverview = () => {
               <div className="space-y-3">
                 {projectsData.projects.slice(0, 5).map((project) => (
                   <Link key={project.id} href={`/client-portal/projects/${project.id}`}>
-                    <a className="block p-3 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors">
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="text-white font-medium">{project.title}</h4>
-                        <Badge className={getColorClasses(
-                          project.status === 'completed' ? 'green' :
-                          project.status === 'in_progress' ? 'blue' :
-                          project.status === 'on_hold' ? 'orange' : 'purple'
-                        )}>
+                    <a className="block rounded-xl border border-white/5 bg-white/[0.03] p-3 transition-colors hover:border-[var(--hopstec-teal)]/25 hover:bg-white/[0.05]">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <h4 className="font-medium text-white">{project.title}</h4>
+                        <Badge className={statusClass(project.status)}>
                           {project.status.replace('_', ' ')}
                         </Badge>
                       </div>
@@ -215,12 +205,12 @@ const DashboardOverview = () => {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8 text-gray-400">
-                <FolderKanban className="h-12 w-12 mx-auto mb-3 opacity-50" />
+              <div className="py-8 text-center text-gray-400">
+                <FolderKanban className="mx-auto mb-3 h-12 w-12 opacity-50" />
                 <p>No projects yet</p>
                 <Link href="/client-portal/projects">
                   <a>
-                    <Button variant="link" className="text-blue-400 mt-2">
+                    <Button variant="link" className="mt-2 text-[var(--hopstec-teal)]">
                       Create your first project
                     </Button>
                   </a>
@@ -231,10 +221,10 @@ const DashboardOverview = () => {
         </Card>
 
         {/* Recent Activity */}
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="portal-panel border-0 shadow-none">
           <CardHeader>
-            <CardTitle className="text-white flex items-center gap-2">
-              <Activity className="h-5 w-5 text-blue-400" />
+            <CardTitle className="flex items-center gap-2 text-white">
+              <Activity className="h-5 w-5 text-[var(--hopstec-teal)]" />
               Recent Activity
             </CardTitle>
             <CardDescription className="text-gray-400">
@@ -249,13 +239,13 @@ const DashboardOverview = () => {
                 ))}
               </div>
             ) : activities && activities.length > 0 ? (
-              <div className="space-y-3 max-h-96 overflow-y-auto">
+              <div className="max-h-96 space-y-3 overflow-y-auto">
                 {activities.map((activity) => (
-                  <div key={activity.id} className="flex items-start gap-3 p-2 rounded-lg hover:bg-slate-800/50">
-                    <div className="w-2 h-2 bg-blue-400 rounded-full mt-2" />
+                  <div key={activity.id} className="flex items-start gap-3 rounded-lg p-2 hover:bg-white/[0.03]">
+                    <div className="mt-2 h-2 w-2 rounded-full bg-[var(--hopstec-teal)]" />
                     <div className="flex-1">
                       <p className="text-sm text-white">{activity.description}</p>
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="mt-1 text-xs text-gray-500">
                         {new Date(activity.createdAt).toLocaleString()}
                       </p>
                     </div>
@@ -263,8 +253,8 @@ const DashboardOverview = () => {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8 text-gray-400">
-                <Activity className="h-12 w-12 mx-auto mb-3 opacity-50" />
+              <div className="py-8 text-center text-gray-400">
+                <Activity className="mx-auto mb-3 h-12 w-12 opacity-50" />
                 <p>No recent activity</p>
               </div>
             )}
