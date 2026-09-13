@@ -11,6 +11,7 @@ import {
   STAFF_JOB_TITLES,
   accessRoleLabel,
   isInternalRole,
+  isSuperAdminEmail,
 } from "@shared/roles";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -187,7 +188,11 @@ const InternalTeamPage = () => {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {!isInternalRole(row.role) ? (
+                  {isSuperAdminEmail(row.email) ? (
+                    <Badge className="border-[var(--hopstec-teal)]/30 bg-[var(--hopstec-teal)]/10 text-[var(--hopstec-teal)]">
+                      Founder · protected
+                    </Badge>
+                  ) : !isInternalRole(row.role) ? (
                     <Button
                       size="sm"
                       variant="outline"

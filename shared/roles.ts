@@ -11,6 +11,7 @@ export type PortalAudience = (typeof PORTAL_AUDIENCES)[number];
 
 /** Engineering / delivery titles used across ops and profile UI. */
 export const STAFF_JOB_TITLES = [
+  "Founder, CEO & Lead Engineer",
   "Founder & Lead Engineer",
   "Solutions Architect",
   "Full-Stack Engineer",
@@ -25,6 +26,14 @@ export const STAFF_JOB_TITLES = [
 ] as const;
 
 export type StaffJobTitle = (typeof STAFF_JOB_TITLES)[number];
+
+/** Protected overseer — cannot be demoted via Team UI. */
+export const SUPER_ADMIN_EMAIL = "hk@hopstecinnovation.com";
+
+export function isSuperAdminEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  return email.trim().toLowerCase() === SUPER_ADMIN_EMAIL;
+}
 
 export function isInternalRole(role: string | null | undefined): boolean {
   return role === "admin" || role === "staff";

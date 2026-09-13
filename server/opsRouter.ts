@@ -2,7 +2,7 @@ import { and, asc, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { adminProcedure, protectedProcedure, staffProcedure, router } from "./_core/trpc";
-import { isInternalRole, STAFF_JOB_TITLES } from "../shared/roles";
+import { isInternalRole, isSuperAdminEmail, STAFF_JOB_TITLES } from "../shared/roles";
 import { getDb } from "./db";
 import { upsertUser, getUserByEmail } from "./db";
 import { nanoid } from "nanoid";
@@ -607,7 +607,10 @@ export const opsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const db = await requireDb();
       if (input.userId === ctx.user.id && input.role !== "admin") {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "You cannot revoke your own administrator access." });
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "You cannot revoke your own administrator access.",
+        });
       }
       const [target] = await db
         .select()
@@ -617,6 +620,33 @@ export const opsRouter = router({
 
       if (!target) {
         throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+      }
+
+      // Elisee Kajingu (super admin) cannot be demoted or have title stripped by others.
+      if (isSuperAdminEmail(target.email)) {
+        if (input.role !== "admin") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "The founder account is protected and cannot be demoted.",
+          });
+        }
+        if (!isSuperAdminEmail(ctx.user.email)) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Only the founder can update the founder account.",
+          });
+        }
+      }
+
+      // Only the super admin may grant or revoke the admin role.
+      if (
+        (input.role === "admin" || target.role === "admin") &&
+        !isSuperAdminEmail(ctx.user.email)
+      ) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Only the founder can grant or revoke administrator access.",
+        });
       }
 
       await db
@@ -629,6 +659,7 @@ export const opsRouter = router({
               : input.jobTitle === undefined
                 ? target.jobTitle
                 : input.jobTitle,
+          name: isSuperAdminEmail(target.email) ? "Elisee Kajingu" : target.name,
           updatedAt: new Date(),
         })
         .where(eq(users.id, input.userId));
@@ -777,16 +808,34 @@ export const opsRouter = router({
         jobTitle: z.enum(STAFF_JOB_TITLES),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      if (input.role === "admin" && !isSuperAdminEmail(ctx.user.email)) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Only the founder can grant administrator access.",
+        });
+      }
+
       const db = await requireDb();
       let user = await getUserByEmail(input.email);
+
+      if (isSuperAdminEmail(input.email) && input.role !== "admin") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "The founder account must remain administrator.",
+        });
+      }
 
       if (!user) {
         const openId = `magic_${nanoid(16)}`;
         await upsertUser({
           openId,
           email: input.email,
-          name: input.name || input.email.split("@")[0],
+          name:
+            input.name ||
+            (isSuperAdminEmail(input.email)
+              ? "Elisee Kajingu"
+              : input.email.split("@")[0]),
           loginMethod: "magic-link",
           role: input.role,
           jobTitle: input.jobTitle,
@@ -799,7 +848,9 @@ export const opsRouter = router({
           .set({
             role: input.role,
             jobTitle: input.jobTitle,
-            name: input.name || user.name,
+            name:
+              input.name ||
+              (isSuperAdminEmail(input.email) ? "Elisee Kajingu" : user.name),
             updatedAt: new Date(),
           })
           .where(eq(users.id, user.id));
