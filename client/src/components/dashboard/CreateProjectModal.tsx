@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Plus, Minus } from 'lucide-react';
+import { X, Plus, UploadCloud, FileText } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -39,6 +39,7 @@ const CreateProjectModal = ({ open, onOpenChange }: CreateProjectModalProps) => 
   const [endDate, setEndDate] = useState('');
   const [technologies, setTechnologies] = useState<string[]>([]);
   const [techInput, setTechInput] = useState('');
+  const [documents, setDocuments] = useState<File[]>([]);
 
   const utils = trpc.useUtils();
 
@@ -47,7 +48,7 @@ const CreateProjectModal = ({ open, onOpenChange }: CreateProjectModalProps) => 
 
   const createMutation = trpc.clientPortal.createProject.useMutation({
     onSuccess: () => {
-      toast.success('Project created successfully!');
+      toast.success('Quotation request sent to Hopstec');
       utils.clientPortal.getProjects.invalidate();
       utils.clientPortal.getDashboardStats.invalidate();
       resetForm();
@@ -69,6 +70,7 @@ const CreateProjectModal = ({ open, onOpenChange }: CreateProjectModalProps) => 
     setEndDate('');
     setTechnologies([]);
     setTechInput('');
+    setDocuments([]);
   };
 
   const handleAddTechnology = () => {
@@ -82,7 +84,7 @@ const CreateProjectModal = ({ open, onOpenChange }: CreateProjectModalProps) => 
     setTechnologies(technologies.filter((t) => t !== tech));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!title.trim() || title.length < 3) {
@@ -107,6 +109,12 @@ const CreateProjectModal = ({ open, onOpenChange }: CreateProjectModalProps) => 
 
     const finalProjectType = projectType === 'custom' ? customProjectType.trim() : projectType;
 
+    const encodedDocuments = await Promise.all(documents.map(file => new Promise<{ fileName: string; contentType: "application/pdf" | "application/vnd.openxmlformats-officedocument.wordprocessingml.document" | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" | "image/png" | "image/jpeg"; base64: string; type: "rfq" }>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error(`Could not read ${file.name}`));
+      reader.onload = () => resolve({ fileName: file.name, contentType: file.type as "application/pdf" | "application/vnd.openxmlformats-officedocument.wordprocessingml.document" | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" | "image/png" | "image/jpeg", base64: String(reader.result).split(",")[1] || "", type: "rfq" });
+      reader.readAsDataURL(file);
+    })));
     createMutation.mutate({
       title: title.trim(),
       description: description.trim(),
@@ -116,6 +124,7 @@ const CreateProjectModal = ({ open, onOpenChange }: CreateProjectModalProps) => 
       startDate: startDate ? new Date(startDate) : undefined,
       endDate: endDate ? new Date(endDate) : undefined,
       technologies,
+      documents: encodedDocuments,
     });
   };
 
@@ -123,9 +132,9 @@ const CreateProjectModal = ({ open, onOpenChange }: CreateProjectModalProps) => 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-slate-900 border-slate-800 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-2xl">Create New Project</DialogTitle>
+          <DialogTitle className="text-2xl">Request a quotation</DialogTitle>
           <DialogDescription className="text-gray-400">
-            Fill in the details to create a new project
+            Tell us what you need and attach your SOW, RFQ, designs, or supporting documents. The request enters the Hopstec intake queue for review.
           </DialogDescription>
         </DialogHeader>
 
@@ -336,6 +345,21 @@ const CreateProjectModal = ({ open, onOpenChange }: CreateProjectModalProps) => 
             )}
           </div>
 
+          <div>
+            <Label className="text-white">SOW / RFQ documents</Label>
+            <label className="mt-2 flex cursor-pointer flex-col items-center rounded-xl border border-dashed border-emerald-300/25 bg-emerald-300/[.04] p-6 text-center hover:border-emerald-300/50">
+              <UploadCloud className="mb-2 text-emerald-300" />
+              <span className="text-sm font-medium text-white">Choose files</span>
+              <span className="mt-1 text-xs text-slate-500">PDF, Word, Excel, PNG or JPEG · 7 MB each · up to 5</span>
+              <input className="sr-only" type="file" multiple accept=".pdf,.docx,.xlsx,.png,.jpg,.jpeg" onChange={event => {
+                const next = Array.from(event.target.files || []);
+                if (next.some(file => file.size > 7 * 1024 * 1024)) return toast.error("Each document must be smaller than 7 MB");
+                setDocuments(next.slice(0, 5));
+              }} />
+            </label>
+            {documents.length > 0 && <div className="mt-3 space-y-2">{documents.map(file => <div key={file.name} className="flex items-center justify-between rounded-lg border border-white/10 px-3 py-2 text-sm"><span className="flex min-w-0 items-center gap-2 text-slate-300"><FileText size={15}/><span className="truncate">{file.name}</span></span><button type="button" aria-label={`Remove ${file.name}`} onClick={() => setDocuments(items => items.filter(item => item !== file))}><X size={15}/></button></div>)}</div>}
+          </div>
+
           {/* Actions */}
           <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
             <Button
@@ -358,10 +382,10 @@ const CreateProjectModal = ({ open, onOpenChange }: CreateProjectModalProps) => 
               {createMutation.isPending ? (
                 <>
                   <ButtonSpinner className="mr-2" />
-                  Creating...
+                  Sending request...
                 </>
               ) : (
-                'Create Project'
+                'Send quotation request'
               )}
             </Button>
           </div>
@@ -372,4 +396,3 @@ const CreateProjectModal = ({ open, onOpenChange }: CreateProjectModalProps) => 
 };
 
 export default CreateProjectModal;
-

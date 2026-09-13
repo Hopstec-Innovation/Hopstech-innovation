@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useRoute, Link } from 'wouter';
-import { ArrowLeft, Calendar, DollarSign, Clock, CheckCircle2, Circle, FileText, Activity, List, BarChart3, Zap } from 'lucide-react';
+import { ArrowLeft, Calendar, DollarSign, Clock, CheckCircle2, Circle, FileText, Activity, List, BarChart3, Zap, UploadCloud } from 'lucide-react';
 import DashboardLayout from '../components/dashboard/DashboardLayout';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -76,6 +76,23 @@ const ClientProjectDetailPage = () => {
       setClientDoc({ type: "sow", fileName: "", fileUrl: "" });
     },
   });
+  const uploadDoc = trpc.ops.uploadCommercialDocument.useMutation();
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const handleClientDocument = async (file?: File) => {
+    if (!file || !projectId) return;
+    if (file.size > 7 * 1024 * 1024) return;
+    setUploadingFile(true);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error("Could not read file"));
+        reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+        reader.readAsDataURL(file);
+      });
+      const stored = await uploadDoc.mutateAsync({ projectId, fileName: file.name, contentType: file.type as "application/pdf" | "application/vnd.openxmlformats-officedocument.wordprocessingml.document" | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" | "image/png" | "image/jpeg", base64 });
+      setClientDoc(doc => ({ ...doc, fileName: file.name, fileUrl: stored.url }));
+    } finally { setUploadingFile(false); }
+  };
 
   const getStatusColor = (status: string) => {
     const colors = {
@@ -253,10 +270,12 @@ const ClientProjectDetailPage = () => {
                 <CardHeader>
                   <CardTitle className="text-white">Upload SOW / RFQ / PO</CardTitle>
                   <CardDescription className="text-gray-400">
-                    Share your cahier des charges, RFQ, or approved PO via a document link.
+                    Share your cahier des charges, RFQ, or approved PO securely with the delivery team.
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="flex flex-wrap gap-2">
+                <CardContent className="space-y-4">
+                  <label className="flex cursor-pointer flex-col items-center rounded-xl border border-dashed border-emerald-300/25 bg-emerald-300/[.04] p-5 text-center"><UploadCloud className="mb-2 text-emerald-300"/><span className="text-sm font-medium text-white">{uploadingFile ? "Uploading…" : "Choose a document"}</span><span className="mt-1 text-xs text-slate-500">PDF, Word, Excel, PNG or JPEG · maximum 7 MB</span><input className="sr-only" disabled={uploadingFile} type="file" accept=".pdf,.docx,.xlsx,.png,.jpg,.jpeg" onChange={event => { void handleClientDocument(event.target.files?.[0]); event.currentTarget.value = ""; }}/></label>
+                  <div className="flex flex-wrap gap-2">
                   <select
                     className="rounded-md border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white"
                     value={clientDoc.type}
@@ -307,6 +326,7 @@ const ClientProjectDetailPage = () => {
                     Upload
                   </Button>
                   {projectId ? <WipExportButton projectId={projectId} /> : null}
+                  </div>
                 </CardContent>
               </Card>
 

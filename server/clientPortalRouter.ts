@@ -17,11 +17,16 @@ import {
   changeRequests,
   paymentPlans,
   paymentInstallments,
-  projectStatusChanges
+  projectStatusChanges,
+  engagementDocuments,
+  engagementEvents,
+  users
 } from "../drizzle/schema";
-import { eq, and, desc, asc, sql, or, count } from "drizzle-orm";
+import { eq, and, desc, asc, sql, or, count, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { sendProjectInquiryEmail } from "./emailService";
+import { privateBlobPut } from "./blobStorage";
+import { nanoid } from "nanoid";
 
 export const clientPortalRouter = router({
   /**
@@ -375,6 +380,12 @@ export const clientPortalRouter = router({
         startDate: z.date().optional(),
         endDate: z.date().optional(),
         technologies: z.array(z.string()).default([]),
+        documents: z.array(z.object({
+          fileName: z.string().min(1).max(180),
+          contentType: z.enum(["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "image/png", "image/jpeg"]),
+          base64: z.string().min(1).max(10_000_000),
+          type: z.enum(["sow", "rfq"]).default("rfq"),
+        })).max(5).default([]),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -400,6 +411,51 @@ export const clientPortalRouter = router({
           actualHours: 0,
         })
         .returning();
+
+      for (const document of input.documents) {
+        const bytes = Buffer.from(document.base64, "base64");
+        if (!bytes.length || bytes.length > 7 * 1024 * 1024) {
+          throw new TRPCError({ code: "PAYLOAD_TOO_LARGE", message: `${document.fileName} must be smaller than 7 MB` });
+        }
+        const safeName = document.fileName.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "document";
+        const stored = await privateBlobPut(`engagements/${project.id}/${Date.now()}-${nanoid(8)}-${safeName}`, bytes, document.contentType);
+        await db.insert(engagementDocuments).values({
+          projectId: project.id,
+          type: document.type,
+          status: "received",
+          fileName: document.fileName,
+          fileUrl: stored.url,
+          uploadedBy: ctx.user.id,
+          uploadedByRole: "client",
+        });
+      }
+      if (input.documents.length) {
+        await db.update(clientProjectsExtended).set({ commercialStage: "quoting", updatedAt: new Date() }).where(eq(clientProjectsExtended.id, project.id));
+      }
+      await db.insert(engagementEvents).values({
+        projectId: project.id,
+        type: "client_rfq_submitted",
+        message: input.documents.length
+          ? `Client submitted quotation request with ${input.documents.length} document(s)`
+          : "Client submitted quotation request",
+        actorId: ctx.user.id,
+        isInternal: false,
+      });
+      const staffRecipients = await db.select({ id: users.id }).from(users).where(inArray(users.role, ["admin", "staff"]));
+      if (staffRecipients.length) {
+        await db.insert(notifications).values(staffRecipients.map(({ id }) => ({
+          userId: id,
+          type: "project_update" as const,
+          priority: input.priority === "urgent" ? "urgent" as const : "high" as const,
+          title: "New quotation request",
+          message: `${ctx.user.name || "A client"} requested a quotation for ${input.title}`,
+          link: `/internal/projects/${project.id}`,
+          actionType: "view" as const,
+          actionUrl: `/internal/projects/${project.id}`,
+          actionLabel: "Review request",
+          read: false,
+        })));
+      }
 
       await db.insert(activityLog).values({
         userId: ctx.user.id,

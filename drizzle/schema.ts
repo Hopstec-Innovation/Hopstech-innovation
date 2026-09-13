@@ -25,6 +25,8 @@ export const ticketStatusEnum = pgEnum("ticket_status", ["open", "in_progress", 
 export const ticketPriorityEnum = pgEnum("ticket_priority", ["low", "medium", "high", "urgent"]);
 export const projectPriorityEnum = pgEnum("project_priority", ["low", "medium", "high", "urgent"]);
 export const messageTypeEnum = pgEnum("message_type", ["text", "file", "system"]);
+export const staffAvailabilityEnum = pgEnum("staff_availability", ["available", "busy", "in_meeting", "offline"]);
+export const chatStatusEnum = pgEnum("chat_status", ["waiting", "assigned", "snoozed", "closed"]);
 export const notificationTypeEnum = pgEnum("notification_type", ["project_update", "message", "invoice", "ticket", "system"]);
 export const notificationPriorityEnum = pgEnum("notification_priority", ["low", "medium", "high", "urgent"]);
 export const notificationActionTypeEnum = pgEnum("notification_action_type", ["none", "view", "approve", "respond", "download", "custom"]);
@@ -80,6 +82,9 @@ export const users = pgTable("users", {
   role: userRoleEnum("role").default("user").notNull(),
   /** Engineering / delivery title for staff (e.g. Full-Stack Engineer). */
   jobTitle: varchar("jobTitle", { length: 120 }),
+  /** Staff-controlled live-chat routing state. Never exposed to clients by identity. */
+  availability: staffAvailabilityEnum("availability").default("offline").notNull(),
+  availabilityUpdatedAt: timestamp("availabilityUpdatedAt", { mode: "date", withTimezone: true }),
   createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn", { mode: "date", withTimezone: true }).defaultNow().notNull(),
@@ -611,10 +616,34 @@ export type TicketMessage = typeof ticketMessages.$inferSelect;
 export type InsertTicketMessage = typeof ticketMessages.$inferInsert;
 
 /**
+ * One durable client/team conversation. Assignment is server-controlled from
+ * staff availability; clients only see the Hopstec Team identity.
+ */
+export const chatConversations = pgTable("chatConversations", {
+  id: serial("id").primaryKey(),
+  clientId: integer("clientId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  assignedTo: integer("assignedTo").references(() => users.id),
+  status: chatStatusEnum("status").default("waiting").notNull(),
+  snoozedUntil: timestamp("snoozedUntil", { mode: "date", withTimezone: true }),
+  lastMessageAt: timestamp("lastMessageAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  clientIdx: uniqueIndex("chat_conversations_client_idx").on(table.clientId),
+  assignedIdx: index("chat_conversations_assigned_idx").on(table.assignedTo),
+  statusIdx: index("chat_conversations_status_idx").on(table.status),
+  lastMessageIdx: index("chat_conversations_last_message_idx").on(table.lastMessageAt),
+}));
+
+export type ChatConversation = typeof chatConversations.$inferSelect;
+export type InsertChatConversation = typeof chatConversations.$inferInsert;
+
+/**
  * Messages table - direct messaging between users
  */
 export const messages = pgTable("messages", {
   id: serial("id").primaryKey(),
+  conversationId: integer("conversationId").references(() => chatConversations.id, { onDelete: "cascade" }),
   senderId: integer("senderId").notNull().references(() => users.id),
   recipientId: integer("recipientId").notNull().references(() => users.id),
   projectId: integer("projectId").references(() => clientProjectsExtended.id),
@@ -632,6 +661,7 @@ export const messages = pgTable("messages", {
   createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
+  conversationIdIdx: index("messages_conversation_id_idx").on(table.conversationId),
   senderIdIdx: index("messages_sender_id_idx").on(table.senderId),
   recipientIdIdx: index("messages_recipient_id_idx").on(table.recipientId),
   projectIdIdx: index("messages_project_id_idx").on(table.projectId),

@@ -66,7 +66,7 @@ const ProjectsPage = () => {
               className="bg-blue-600 hover:bg-blue-700 text-white"
             >
               <Plus className="h-4 w-4 mr-2" />
-              Create Project
+                    Request quotation
             </Button>
           </div>
 
@@ -178,12 +178,12 @@ const ProjectsPage = () => {
                 <p className="text-gray-400 mb-6 text-center max-w-md">
                   {searchQuery || statusFilter !== 'all'
                     ? 'Try adjusting your filters or search query'
-                    : 'Get started by creating your first project'}
+                    : 'Start by sending your first quotation request'}
                 </p>
                 {!searchQuery && statusFilter === 'all' && (
                   <Button onClick={() => setCreateModalOpen(true)} className="bg-blue-600 hover:bg-blue-700">
                     <Plus className="h-4 w-4 mr-2" />
-                    Create Your First Project
+                    Request Your First Quotation
                   </Button>
                 )}
               </CardContent>
@@ -198,4 +198,3 @@ const ProjectsPage = () => {
 };
 
 export default ProjectsPage;
-

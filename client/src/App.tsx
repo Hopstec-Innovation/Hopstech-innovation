@@ -30,6 +30,7 @@ const InternalEngagementsPage = lazy(() => import("./pages/InternalEngagementsPa
 const InternalIntakePage = lazy(() => import("./pages/InternalIntakePage"));
 const InternalProjectPage = lazy(() => import("./pages/InternalProjectPage"));
 const InternalTeamPage = lazy(() => import("./pages/InternalTeamPage"));
+const InternalInboxPage = lazy(() => import("./pages/InternalInboxPage"));
 const InternalStaffLoginPage = lazy(() => import("./pages/InternalStaffLoginPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -77,6 +78,7 @@ function Router() {
       <Route path={"/client-portal"}>{() => <ClientPortalPage />}</Route>
       <Route path={"/internal/login"}>{() => <InternalStaffLoginPage />}</Route>
       <Route path={"/internal/intake"}>{() => <InternalIntakePage />}</Route>
+      <Route path={"/internal/inbox"}>{() => <InternalInboxPage />}</Route>
       <Route path={"/internal/team"}>{() => <InternalTeamPage />}</Route>
       <Route path={"/internal/projects/:id"}>{() => <InternalProjectPage />}</Route>
       <Route path={"/internal"}>{() => <InternalEngagementsPage />}</Route>

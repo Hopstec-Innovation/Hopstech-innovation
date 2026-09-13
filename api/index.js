@@ -41,6 +41,8 @@ var ticketStatusEnum = pgEnum("ticket_status", ["open", "in_progress", "waiting_
 var ticketPriorityEnum = pgEnum("ticket_priority", ["low", "medium", "high", "urgent"]);
 var projectPriorityEnum = pgEnum("project_priority", ["low", "medium", "high", "urgent"]);
 var messageTypeEnum = pgEnum("message_type", ["text", "file", "system"]);
+var staffAvailabilityEnum = pgEnum("staff_availability", ["available", "busy", "in_meeting", "offline"]);
+var chatStatusEnum = pgEnum("chat_status", ["waiting", "assigned", "snoozed", "closed"]);
 var notificationTypeEnum = pgEnum("notification_type", ["project_update", "message", "invoice", "ticket", "system"]);
 var notificationPriorityEnum = pgEnum("notification_priority", ["low", "medium", "high", "urgent"]);
 var notificationActionTypeEnum = pgEnum("notification_action_type", ["none", "view", "approve", "respond", "download", "custom"]);
@@ -90,6 +92,9 @@ var users = pgTable("users", {
   role: userRoleEnum("role").default("user").notNull(),
   /** Engineering / delivery title for staff (e.g. Full-Stack Engineer). */
   jobTitle: varchar("jobTitle", { length: 120 }),
+  /** Staff-controlled live-chat routing state. Never exposed to clients by identity. */
+  availability: staffAvailabilityEnum("availability").default("offline").notNull(),
+  availabilityUpdatedAt: timestamp("availabilityUpdatedAt", { mode: "date", withTimezone: true }),
   createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn", { mode: "date", withTimezone: true }).defaultNow().notNull()
@@ -483,8 +488,24 @@ var ticketMessages = pgTable("ticketMessages", {
   authorIdIdx: index("ticket_messages_author_id_idx").on(table.authorId),
   createdAtIdx: index("ticket_messages_created_at_idx").on(table.createdAt)
 }));
+var chatConversations = pgTable("chatConversations", {
+  id: serial("id").primaryKey(),
+  clientId: integer("clientId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  assignedTo: integer("assignedTo").references(() => users.id),
+  status: chatStatusEnum("status").default("waiting").notNull(),
+  snoozedUntil: timestamp("snoozedUntil", { mode: "date", withTimezone: true }),
+  lastMessageAt: timestamp("lastMessageAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date", withTimezone: true }).defaultNow().notNull()
+}, (table) => ({
+  clientIdx: uniqueIndex("chat_conversations_client_idx").on(table.clientId),
+  assignedIdx: index("chat_conversations_assigned_idx").on(table.assignedTo),
+  statusIdx: index("chat_conversations_status_idx").on(table.status),
+  lastMessageIdx: index("chat_conversations_last_message_idx").on(table.lastMessageAt)
+}));
 var messages = pgTable("messages", {
   id: serial("id").primaryKey(),
+  conversationId: integer("conversationId").references(() => chatConversations.id, { onDelete: "cascade" }),
   senderId: integer("senderId").notNull().references(() => users.id),
   recipientId: integer("recipientId").notNull().references(() => users.id),
   projectId: integer("projectId").references(() => clientProjectsExtended.id),
@@ -497,6 +518,7 @@ var messages = pgTable("messages", {
   createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { mode: "date", withTimezone: true }).defaultNow().notNull()
 }, (table) => ({
+  conversationIdIdx: index("messages_conversation_id_idx").on(table.conversationId),
   senderIdIdx: index("messages_sender_id_idx").on(table.senderId),
   recipientIdIdx: index("messages_recipient_id_idx").on(table.recipientId),
   projectIdIdx: index("messages_project_id_idx").on(table.projectId),
@@ -1228,6 +1250,7 @@ async function notifyOwner(payload) {
 // shared/roles.ts
 var PORTAL_AUDIENCES = ["client", "team"];
 var STAFF_JOB_TITLES = [
+  "Founder, CEO & Lead Engineer",
   "Founder & Lead Engineer",
   "Solutions Architect",
   "Full-Stack Engineer",
@@ -1240,6 +1263,11 @@ var STAFF_JOB_TITLES = [
   "Technical Consultant",
   "QA / Reliability Engineer"
 ];
+var SUPER_ADMIN_EMAIL = "hk@hopstecinnovation.com";
+function isSuperAdminEmail(email) {
+  if (!email) return false;
+  return email.trim().toLowerCase() === SUPER_ADMIN_EMAIL;
+}
 function isInternalRole(role) {
   return role === "admin" || role === "staff";
 }
@@ -1911,8 +1939,33 @@ var contactRouter = router({
 
 // server/clientPortalRouter.ts
 import { z as z6 } from "zod";
-import { eq as eq5, and as and3, desc as desc3, asc as asc2, sql as sql2, or as or2, count } from "drizzle-orm";
+import { eq as eq5, and as and3, desc as desc3, asc as asc2, sql as sql2, or as or2, count, inArray } from "drizzle-orm";
 import { TRPCError as TRPCError4 } from "@trpc/server";
+
+// server/blobStorage.ts
+import { get, put } from "@vercel/blob";
+function requireBlobToken() {
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    throw new Error("BLOB_READ_WRITE_TOKEN is not configured");
+  }
+}
+async function privateBlobPut(pathname, data, contentType) {
+  requireBlobToken();
+  const body = Buffer.isBuffer(data) ? data : Buffer.from(data);
+  const blob = await put(pathname.replace(/^\/+/, ""), body, {
+    access: "private",
+    addRandomSuffix: false,
+    contentType
+  });
+  return { key: blob.pathname, url: blob.url };
+}
+async function privateBlobGet(urlOrPathname) {
+  requireBlobToken();
+  return get(urlOrPathname, { access: "private" });
+}
+
+// server/clientPortalRouter.ts
+import { nanoid } from "nanoid";
 var clientPortalRouter = router({
   /**
    * ========================================
@@ -2153,7 +2206,13 @@ var clientPortalRouter = router({
       budget: z6.number().optional(),
       startDate: z6.date().optional(),
       endDate: z6.date().optional(),
-      technologies: z6.array(z6.string()).default([])
+      technologies: z6.array(z6.string()).default([]),
+      documents: z6.array(z6.object({
+        fileName: z6.string().min(1).max(180),
+        contentType: z6.enum(["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "image/png", "image/jpeg"]),
+        base64: z6.string().min(1).max(1e7),
+        type: z6.enum(["sow", "rfq"]).default("rfq")
+      })).max(5).default([])
     })
   ).mutation(async ({ ctx, input }) => {
     const db = await getDb();
@@ -2174,6 +2233,48 @@ var clientPortalRouter = router({
       deliverables: [],
       actualHours: 0
     }).returning();
+    for (const document of input.documents) {
+      const bytes = Buffer.from(document.base64, "base64");
+      if (!bytes.length || bytes.length > 7 * 1024 * 1024) {
+        throw new TRPCError4({ code: "PAYLOAD_TOO_LARGE", message: `${document.fileName} must be smaller than 7 MB` });
+      }
+      const safeName = document.fileName.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "document";
+      const stored = await privateBlobPut(`engagements/${project.id}/${Date.now()}-${nanoid(8)}-${safeName}`, bytes, document.contentType);
+      await db.insert(engagementDocuments).values({
+        projectId: project.id,
+        type: document.type,
+        status: "received",
+        fileName: document.fileName,
+        fileUrl: stored.url,
+        uploadedBy: ctx.user.id,
+        uploadedByRole: "client"
+      });
+    }
+    if (input.documents.length) {
+      await db.update(clientProjectsExtended).set({ commercialStage: "quoting", updatedAt: /* @__PURE__ */ new Date() }).where(eq5(clientProjectsExtended.id, project.id));
+    }
+    await db.insert(engagementEvents).values({
+      projectId: project.id,
+      type: "client_rfq_submitted",
+      message: input.documents.length ? `Client submitted quotation request with ${input.documents.length} document(s)` : "Client submitted quotation request",
+      actorId: ctx.user.id,
+      isInternal: false
+    });
+    const staffRecipients = await db.select({ id: users.id }).from(users).where(inArray(users.role, ["admin", "staff"]));
+    if (staffRecipients.length) {
+      await db.insert(notifications).values(staffRecipients.map(({ id }) => ({
+        userId: id,
+        type: "project_update",
+        priority: input.priority === "urgent" ? "urgent" : "high",
+        title: "New quotation request",
+        message: `${ctx.user.name || "A client"} requested a quotation for ${input.title}`,
+        link: `/internal/projects/${project.id}`,
+        actionType: "view",
+        actionUrl: `/internal/projects/${project.id}`,
+        actionLabel: "Review request",
+        read: false
+      })));
+    }
     await db.insert(activityLog).values({
       userId: ctx.user.id,
       action: "project_created",
@@ -3143,7 +3244,7 @@ var clientPortalRouter = router({
 // server/magicLinkRouter.ts
 import { z as z7 } from "zod";
 import { TRPCError as TRPCError5 } from "@trpc/server";
-import { nanoid } from "nanoid";
+import { nanoid as nanoid2 } from "nanoid";
 var MAGIC_LINK_EXPIRY_MINUTES = 15;
 var STAFF_GENERIC_OK = "If this account is authorised, a sign-in link has been sent.";
 var STAFF_GENERIC_FAIL = "Sign-in is not available for this account.";
@@ -3213,7 +3314,7 @@ var magicLinkRouter = router({
     }
     const ip = ctx.req?.headers?.["x-forwarded-for"] || ctx.req?.headers?.["x-real-ip"] || "unknown";
     const userAgent = ctx.req?.headers?.["user-agent"] || "unknown";
-    const token = nanoid(32);
+    const token = nanoid2(32);
     const expiresAt = new Date(
       Date.now() + MAGIC_LINK_EXPIRY_MINUTES * 60 * 1e3
     );
@@ -3283,7 +3384,7 @@ var magicLinkRouter = router({
             message: STAFF_GENERIC_FAIL
           });
         }
-        const openId = `magic_${nanoid(16)}`;
+        const openId = `magic_${nanoid2(16)}`;
         await upsertUser({
           openId,
           email: magicLink.email,
@@ -3414,7 +3515,7 @@ import { TRPCError as TRPCError6 } from "@trpc/server";
 import { and as and5, asc as asc4, desc as desc5, eq as eq7, or as or4 } from "drizzle-orm";
 
 // server/liveRunHelpers.ts
-import { and as and4, asc as asc3, desc as desc4, eq as eq6, inArray, or as or3 } from "drizzle-orm";
+import { and as and4, asc as asc3, desc as desc4, eq as eq6, inArray as inArray2, or as or3 } from "drizzle-orm";
 var DEFAULT_LIVE_STEPS = [
   { label: "Discover", description: "Scope, goals, and success criteria" },
   { label: "Architect", description: "System design and technical plan" },
@@ -3489,7 +3590,7 @@ async function getLiveRunsForUserProjects(userId) {
   const titleById = new Map(projects2.map((p) => [p.id, p.title]));
   const runs = await db.select().from(projectLiveRuns).where(
     and4(
-      inArray(projectLiveRuns.projectId, projectIds),
+      inArray2(projectLiveRuns.projectId, projectIds),
       or3(
         eq6(projectLiveRuns.status, "active"),
         eq6(projectLiveRuns.status, "paused")
@@ -3498,7 +3599,7 @@ async function getLiveRunsForUserProjects(userId) {
   ).orderBy(desc4(projectLiveRuns.updatedAt));
   if (runs.length === 0) return [];
   const runIds = runs.map((r) => r.id);
-  const steps = await db.select().from(projectLiveSteps).where(inArray(projectLiveSteps.runId, runIds)).orderBy(asc3(projectLiveSteps.orderIndex));
+  const steps = await db.select().from(projectLiveSteps).where(inArray2(projectLiveSteps.runId, runIds)).orderBy(asc3(projectLiveSteps.orderIndex));
   const stepsByRun = /* @__PURE__ */ new Map();
   for (const step of steps) {
     const list = stepsByRun.get(step.runId) || [];
@@ -3973,32 +4074,8 @@ var liveRunRouter = router({
 import { and as and6, asc as asc5, desc as desc6, eq as eq8 } from "drizzle-orm";
 import { z as z9 } from "zod";
 import { TRPCError as TRPCError7 } from "@trpc/server";
-import { nanoid as nanoid2 } from "nanoid";
+import { nanoid as nanoid3 } from "nanoid";
 import { Resend as Resend3 } from "resend";
-
-// server/blobStorage.ts
-import { get, put } from "@vercel/blob";
-function requireBlobToken() {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    throw new Error("BLOB_READ_WRITE_TOKEN is not configured");
-  }
-}
-async function privateBlobPut(pathname, data, contentType) {
-  requireBlobToken();
-  const body = Buffer.isBuffer(data) ? data : Buffer.from(data);
-  const blob = await put(pathname.replace(/^\/+/, ""), body, {
-    access: "private",
-    addRandomSuffix: false,
-    contentType
-  });
-  return { key: blob.pathname, url: blob.url };
-}
-async function privateBlobGet(urlOrPathname) {
-  requireBlobToken();
-  return get(urlOrPathname, { access: "private" });
-}
-
-// server/opsRouter.ts
 var INTERNAL_FIELDS = [
   "serviceLine",
   "department",
@@ -4096,18 +4173,19 @@ var docInput = z9.object({
   status: z9.enum(["draft", "sent", "received", "approved"]).optional()
 });
 var opsRouter = router({
-  uploadCommercialDocument: staffProcedure.input(z9.object({
+  uploadCommercialDocument: protectedProcedure.input(z9.object({
     projectId: z9.number(),
     fileName: z9.string().min(1).max(180),
     contentType: z9.enum(["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "image/png", "image/jpeg"]),
     base64: z9.string().min(1).max(1e7)
-  })).mutation(async ({ input }) => {
-    await getProjectOrThrow(input.projectId);
+  })).mutation(async ({ input, ctx }) => {
+    if (isInternalRole(ctx.user.role)) await getProjectOrThrow(input.projectId);
+    else await assertOwned(input.projectId, ctx.user.id);
     const bytes = Buffer.from(input.base64, "base64");
     if (!bytes.length || bytes.length > 7 * 1024 * 1024) throw new TRPCError7({ code: "PAYLOAD_TOO_LARGE", message: "Choose a document smaller than 7 MB." });
     const safeName = input.fileName.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "document";
     try {
-      return await privateBlobPut(`engagements/${input.projectId}/${Date.now()}-${nanoid2(8)}-${safeName}`, bytes, input.contentType);
+      return await privateBlobPut(`engagements/${input.projectId}/${Date.now()}-${nanoid3(8)}-${safeName}`, bytes, input.contentType);
     } catch {
       console.error("[Ops] Commercial document upload failed");
       throw new TRPCError7({ code: "INTERNAL_SERVER_ERROR", message: "File storage is unavailable. Ask an administrator to configure document storage, or paste a secure document link." });
@@ -4418,15 +4496,39 @@ var opsRouter = router({
   ).mutation(async ({ ctx, input }) => {
     const db = await requireDb2();
     if (input.userId === ctx.user.id && input.role !== "admin") {
-      throw new TRPCError7({ code: "BAD_REQUEST", message: "You cannot revoke your own administrator access." });
+      throw new TRPCError7({
+        code: "BAD_REQUEST",
+        message: "You cannot revoke your own administrator access."
+      });
     }
     const [target] = await db.select().from(users).where(eq8(users.id, input.userId)).limit(1);
     if (!target) {
       throw new TRPCError7({ code: "NOT_FOUND", message: "User not found" });
     }
+    if (isSuperAdminEmail(target.email)) {
+      if (input.role !== "admin") {
+        throw new TRPCError7({
+          code: "FORBIDDEN",
+          message: "The founder account is protected and cannot be demoted."
+        });
+      }
+      if (!isSuperAdminEmail(ctx.user.email)) {
+        throw new TRPCError7({
+          code: "FORBIDDEN",
+          message: "Only the founder can update the founder account."
+        });
+      }
+    }
+    if ((input.role === "admin" || target.role === "admin") && !isSuperAdminEmail(ctx.user.email)) {
+      throw new TRPCError7({
+        code: "FORBIDDEN",
+        message: "Only the founder can grant or revoke administrator access."
+      });
+    }
     await db.update(users).set({
       role: input.role,
       jobTitle: input.role === "client" ? null : input.jobTitle === void 0 ? target.jobTitle : input.jobTitle,
+      name: isSuperAdminEmail(target.email) ? "Elisee Kajingu" : target.name,
       updatedAt: /* @__PURE__ */ new Date()
     }).where(eq8(users.id, input.userId));
     return { success: true };
@@ -4530,15 +4632,27 @@ var opsRouter = router({
       role: z9.enum(["admin", "staff"]),
       jobTitle: z9.enum(STAFF_JOB_TITLES)
     })
-  ).mutation(async ({ input }) => {
+  ).mutation(async ({ ctx, input }) => {
+    if (input.role === "admin" && !isSuperAdminEmail(ctx.user.email)) {
+      throw new TRPCError7({
+        code: "FORBIDDEN",
+        message: "Only the founder can grant administrator access."
+      });
+    }
     const db = await requireDb2();
     let user = await getUserByEmail(input.email);
+    if (isSuperAdminEmail(input.email) && input.role !== "admin") {
+      throw new TRPCError7({
+        code: "FORBIDDEN",
+        message: "The founder account must remain administrator."
+      });
+    }
     if (!user) {
-      const openId = `magic_${nanoid2(16)}`;
+      const openId = `magic_${nanoid3(16)}`;
       await upsertUser({
         openId,
         email: input.email,
-        name: input.name || input.email.split("@")[0],
+        name: input.name || (isSuperAdminEmail(input.email) ? "Elisee Kajingu" : input.email.split("@")[0]),
         loginMethod: "magic-link",
         role: input.role,
         jobTitle: input.jobTitle,
@@ -4549,7 +4663,7 @@ var opsRouter = router({
       await db.update(users).set({
         role: input.role,
         jobTitle: input.jobTitle,
-        name: input.name || user.name,
+        name: input.name || (isSuperAdminEmail(input.email) ? "Elisee Kajingu" : user.name),
         updatedAt: /* @__PURE__ */ new Date()
       }).where(eq8(users.id, user.id));
       user = await getUserByEmail(input.email);
@@ -4570,6 +4684,171 @@ var opsRouter = router({
         jobTitle: user.jobTitle
       }
     };
+  })
+});
+
+// server/chatRouter.ts
+import { and as and7, asc as asc6, desc as desc7, eq as eq9, inArray as inArray3 } from "drizzle-orm";
+import { TRPCError as TRPCError8 } from "@trpc/server";
+import { z as z10 } from "zod";
+async function requireDb3() {
+  const db = await getDb();
+  if (!db) throw new TRPCError8({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+  return db;
+}
+async function availableStaff(db) {
+  const staff = await db.select().from(users).where(and7(
+    inArray3(users.role, ["admin", "staff"]),
+    eq9(users.availability, "available")
+  ));
+  if (!staff.length) return [];
+  const open = await db.select().from(chatConversations).where(and7(
+    eq9(chatConversations.status, "assigned"),
+    inArray3(chatConversations.assignedTo, staff.map((member) => member.id))
+  ));
+  const load = /* @__PURE__ */ new Map();
+  for (const conversation of open) {
+    if (conversation.assignedTo) load.set(conversation.assignedTo, (load.get(conversation.assignedTo) || 0) + 1);
+  }
+  return staff.sort((a, b) => (load.get(a.id) || 0) - (load.get(b.id) || 0));
+}
+async function notifyStaff(db, recipientIds, clientName, content) {
+  if (!recipientIds.length) return;
+  await db.insert(notifications).values(recipientIds.map((userId) => ({
+    userId,
+    type: "message",
+    priority: "high",
+    title: `Live chat \xB7 ${clientName}`,
+    message: content.length > 120 ? `${content.slice(0, 117)}\u2026` : content,
+    link: "/internal/inbox",
+    actionType: "respond",
+    actionUrl: "/internal/inbox",
+    actionLabel: "Open chat",
+    read: false
+  })));
+}
+var chatRouter = router({
+  getClientThread: protectedProcedure.query(async ({ ctx }) => {
+    if (isInternalRole(ctx.user.role)) throw new TRPCError8({ code: "FORBIDDEN", message: "Use the team inbox" });
+    const db = await requireDb3();
+    const [conversation] = await db.select().from(chatConversations).where(eq9(chatConversations.clientId, ctx.user.id)).limit(1);
+    if (!conversation) return { conversation: null, messages: [], teamStatus: "waiting" };
+    const rows = await db.select({ message: messages, senderRole: users.role }).from(messages).leftJoin(users, eq9(messages.senderId, users.id)).where(eq9(messages.conversationId, conversation.id)).orderBy(asc6(messages.createdAt));
+    await db.update(messages).set({ read: true, readAt: /* @__PURE__ */ new Date() }).where(and7(
+      eq9(messages.conversationId, conversation.id),
+      eq9(messages.recipientId, ctx.user.id),
+      eq9(messages.read, false)
+    ));
+    const [assigned] = conversation.assignedTo ? await db.select({ availability: users.availability }).from(users).where(eq9(users.id, conversation.assignedTo)).limit(1) : [];
+    return {
+      conversation: { id: conversation.id, status: conversation.status },
+      messages: rows.map(({ message, senderRole }) => ({ ...message, fromTeam: isInternalRole(senderRole) })),
+      teamStatus: conversation.status === "assigned" && assigned?.availability === "available" ? "online" : "queued"
+    };
+  }),
+  sendClientMessage: protectedProcedure.input(z10.object({ content: z10.string().trim().min(1).max(4e3) })).mutation(async ({ ctx, input }) => {
+    if (isInternalRole(ctx.user.role)) throw new TRPCError8({ code: "FORBIDDEN", message: "Use the team inbox" });
+    const db = await requireDb3();
+    let [conversation] = await db.select().from(chatConversations).where(eq9(chatConversations.clientId, ctx.user.id)).limit(1);
+    let assigneeId = conversation?.assignedTo || null;
+    if (assigneeId) {
+      const [assignee] = await db.select().from(users).where(eq9(users.id, assigneeId)).limit(1);
+      if (!assignee || assignee.availability !== "available" || conversation.status === "closed") assigneeId = null;
+    }
+    if (!assigneeId) assigneeId = (await availableStaff(db))[0]?.id || null;
+    const now = /* @__PURE__ */ new Date();
+    if (!conversation) {
+      [conversation] = await db.insert(chatConversations).values({
+        clientId: ctx.user.id,
+        assignedTo: assigneeId,
+        status: assigneeId ? "assigned" : "waiting",
+        lastMessageAt: now
+      }).returning();
+    } else {
+      [conversation] = await db.update(chatConversations).set({
+        assignedTo: assigneeId,
+        status: assigneeId ? "assigned" : "waiting",
+        snoozedUntil: null,
+        lastMessageAt: now,
+        updatedAt: now
+      }).where(eq9(chatConversations.id, conversation.id)).returning();
+    }
+    const [message] = await db.insert(messages).values({
+      conversationId: conversation.id,
+      senderId: ctx.user.id,
+      recipientId: assigneeId || ctx.user.id,
+      content: input.content,
+      type: "text",
+      read: false,
+      attachments: []
+    }).returning();
+    const recipients = assigneeId ? [assigneeId] : (await db.select({ id: users.id }).from(users).where(inArray3(users.role, ["admin", "staff"]))).map((row) => row.id);
+    await notifyStaff(db, recipients, ctx.user.name || "Client", input.content);
+    return { message, assigned: !!assigneeId };
+  }),
+  getMyAvailability: staffProcedure.query(({ ctx }) => ({
+    availability: ctx.user.availability || "offline"
+  })),
+  setAvailability: staffProcedure.input(z10.object({ availability: z10.enum(["available", "busy", "in_meeting", "offline"]) })).mutation(async ({ ctx, input }) => {
+    const db = await requireDb3();
+    await db.update(users).set({ availability: input.availability, availabilityUpdatedAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(eq9(users.id, ctx.user.id));
+    if (input.availability === "available") {
+      const [waiting] = await db.select().from(chatConversations).where(eq9(chatConversations.status, "waiting")).orderBy(asc6(chatConversations.lastMessageAt)).limit(1);
+      if (waiting) await db.update(chatConversations).set({ assignedTo: ctx.user.id, status: "assigned", updatedAt: /* @__PURE__ */ new Date() }).where(eq9(chatConversations.id, waiting.id));
+    }
+    return { availability: input.availability };
+  }),
+  listInbox: staffProcedure.query(async () => {
+    const db = await requireDb3();
+    const conversations = await db.select({ conversation: chatConversations, client: users }).from(chatConversations).innerJoin(users, eq9(chatConversations.clientId, users.id)).orderBy(desc7(chatConversations.lastMessageAt));
+    const staff = await db.select({ id: users.id, name: users.name, email: users.email, availability: users.availability }).from(users).where(inArray3(users.role, ["admin", "staff"]));
+    const staffById = new Map(staff.map((member) => [member.id, member]));
+    return Promise.all(conversations.map(async ({ conversation, client }) => {
+      const [latest] = await db.select().from(messages).where(eq9(messages.conversationId, conversation.id)).orderBy(desc7(messages.createdAt)).limit(1);
+      const unread = (await db.select().from(messages).where(and7(
+        eq9(messages.conversationId, conversation.id),
+        eq9(messages.read, false),
+        eq9(messages.senderId, client.id)
+      ))).length;
+      return { ...conversation, clientName: client.name || "Client", clientEmail: client.email, latestMessage: latest?.content || "", unread, assignee: conversation.assignedTo ? staffById.get(conversation.assignedTo) || null : null };
+    }));
+  }),
+  getStaffThread: staffProcedure.input(z10.object({ conversationId: z10.number() })).query(async ({ input, ctx }) => {
+    const db = await requireDb3();
+    const [conversation] = await db.select().from(chatConversations).where(eq9(chatConversations.id, input.conversationId)).limit(1);
+    if (!conversation) throw new TRPCError8({ code: "NOT_FOUND", message: "Conversation not found" });
+    const [client] = await db.select({ id: users.id, name: users.name, email: users.email }).from(users).where(eq9(users.id, conversation.clientId)).limit(1);
+    const rows = await db.select({ message: messages, senderName: users.name, senderRole: users.role }).from(messages).leftJoin(users, eq9(messages.senderId, users.id)).where(eq9(messages.conversationId, input.conversationId)).orderBy(asc6(messages.createdAt));
+    await db.update(messages).set({ read: true, readAt: /* @__PURE__ */ new Date() }).where(and7(
+      eq9(messages.conversationId, input.conversationId),
+      eq9(messages.senderId, conversation.clientId),
+      eq9(messages.read, false)
+    ));
+    return { conversation, client, messages: rows.map((row) => ({ ...row.message, senderName: row.senderName, fromTeam: isInternalRole(row.senderRole) })), canReply: !conversation.assignedTo || conversation.assignedTo === ctx.user.id || ctx.user.role === "admin" };
+  }),
+  claim: staffProcedure.input(z10.object({ conversationId: z10.number() })).mutation(async ({ input, ctx }) => {
+    const db = await requireDb3();
+    await db.update(chatConversations).set({ assignedTo: ctx.user.id, status: "assigned", snoozedUntil: null, updatedAt: /* @__PURE__ */ new Date() }).where(eq9(chatConversations.id, input.conversationId));
+    return { success: true };
+  }),
+  snooze: staffProcedure.input(z10.object({ conversationId: z10.number(), minutes: z10.number().min(5).max(1440).default(30) })).mutation(async ({ input, ctx }) => {
+    const db = await requireDb3();
+    const until = new Date(Date.now() + input.minutes * 6e4);
+    await db.update(chatConversations).set({ assignedTo: ctx.user.id, status: "snoozed", snoozedUntil: until, updatedAt: /* @__PURE__ */ new Date() }).where(eq9(chatConversations.id, input.conversationId));
+    return { snoozedUntil: until };
+  }),
+  sendStaffReply: staffProcedure.input(z10.object({ conversationId: z10.number(), content: z10.string().trim().min(1).max(4e3) })).mutation(async ({ input, ctx }) => {
+    const db = await requireDb3();
+    const [conversation] = await db.select().from(chatConversations).where(eq9(chatConversations.id, input.conversationId)).limit(1);
+    if (!conversation) throw new TRPCError8({ code: "NOT_FOUND", message: "Conversation not found" });
+    if (conversation.assignedTo && conversation.assignedTo !== ctx.user.id && ctx.user.role !== "admin") {
+      throw new TRPCError8({ code: "FORBIDDEN", message: "Claim this conversation before replying" });
+    }
+    const now = /* @__PURE__ */ new Date();
+    const [message] = await db.insert(messages).values({ conversationId: conversation.id, senderId: ctx.user.id, recipientId: conversation.clientId, content: input.content, type: "text", read: false, attachments: [] }).returning();
+    await db.update(chatConversations).set({ assignedTo: ctx.user.id, status: "assigned", snoozedUntil: null, lastMessageAt: now, updatedAt: now }).where(eq9(chatConversations.id, conversation.id));
+    await db.insert(notifications).values({ userId: conversation.clientId, type: "message", title: "New message from Hopstec Team", message: input.content.length > 120 ? `${input.content.slice(0, 117)}\u2026` : input.content, link: "/client-portal/messages", read: false });
+    return message;
   })
 });
 
@@ -4596,6 +4875,7 @@ var appRouter = router({
   magicLink: magicLinkRouter,
   liveRun: liveRunRouter,
   ops: opsRouter,
+  chat: chatRouter,
   // Test router (remove in production)
   testEmail: testEmailRouter
 });
@@ -4617,7 +4897,7 @@ async function createContext(opts) {
 
 // server/documentRoutes.ts
 import { Readable } from "node:stream";
-import { and as and7, eq as eq9 } from "drizzle-orm";
+import { and as and8, eq as eq10 } from "drizzle-orm";
 function registerDocumentRoutes(app2) {
   app2.get("/api/documents/:id", async (req, res) => {
     try {
@@ -4633,8 +4913,8 @@ function registerDocumentRoutes(app2) {
         ownerId: clientProjectsExtended.userId
       }).from(engagementDocuments).innerJoin(
         clientProjectsExtended,
-        eq9(clientProjectsExtended.id, engagementDocuments.projectId)
-      ).where(and7(eq9(engagementDocuments.id, documentId))).limit(1);
+        eq10(clientProjectsExtended.id, engagementDocuments.projectId)
+      ).where(and8(eq10(engagementDocuments.id, documentId))).limit(1);
       if (!row || !isInternalRole(user.role) && row.ownerId !== user.id) {
         return res.status(404).send("Document not found");
       }

@@ -144,14 +144,15 @@ const docInput = z.object({
 });
 
 export const opsRouter = router({
-  uploadCommercialDocument: staffProcedure
+  uploadCommercialDocument: protectedProcedure
     .input(z.object({
       projectId: z.number(), fileName: z.string().min(1).max(180),
       contentType: z.enum(["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "image/png", "image/jpeg"]),
       base64: z.string().min(1).max(10_000_000),
     }))
-    .mutation(async ({ input }) => {
-      await getProjectOrThrow(input.projectId);
+    .mutation(async ({ input, ctx }) => {
+      if (isInternalRole(ctx.user.role)) await getProjectOrThrow(input.projectId);
+      else await assertOwned(input.projectId, ctx.user.id);
       const bytes = Buffer.from(input.base64, "base64");
       if (!bytes.length || bytes.length > 7 * 1024 * 1024) throw new TRPCError({ code: "PAYLOAD_TOO_LARGE", message: "Choose a document smaller than 7 MB." });
       const safeName = input.fileName.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "document";
