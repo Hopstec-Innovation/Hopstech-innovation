@@ -625,6 +625,8 @@ export const chatConversations = pgTable("chatConversations", {
   assignedTo: integer("assignedTo").references(() => users.id),
   status: chatStatusEnum("status").default("waiting").notNull(),
   snoozedUntil: timestamp("snoozedUntil", { mode: "date", withTimezone: true }),
+  clientTypingUntil: timestamp("clientTypingUntil", { mode: "date", withTimezone: true }),
+  staffTypingUntil: timestamp("staffTypingUntil", { mode: "date", withTimezone: true }),
   lastMessageAt: timestamp("lastMessageAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
   createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),

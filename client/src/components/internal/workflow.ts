@@ -6,5 +6,26 @@ export const workflowStages = [
   { id: "in_delivery", label: "Live delivery", action: "Open delivery console", description: "Build, test and hand over", color: "#5ee4b9" },
   { id: "closed", label: "Closed", action: "Review engagement", description: "Delivery archive", color: "#9ca3af" },
 ] as const;
-export function stageFor(id: string) { return workflowStages.find(stage => stage.id === id) || workflowStages[0]; }
-export function shortDate(value: Date | string | null | undefined) { return value ? new Date(value).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : "Not set"; }
+
+/** Predefined delivery teams for dispatch + engagement filters. */
+export const opsTeams = [
+  "Full-Stack Engineering",
+  "DevOps & Platform",
+  "Mobile Engineering",
+  "IoT & Embedded",
+  "Delivery Management",
+  "Solutions Architecture",
+] as const;
+
+export function stageFor(id: string) {
+  return workflowStages.find((stage) => stage.id === id) || workflowStages[0];
+}
+export function shortDate(value: Date | string | null | undefined) {
+  return value
+    ? new Date(value).toLocaleDateString(undefined, {
+        day: "numeric",
+        month: "short",
+      })
+    : "Not set";
+}
+

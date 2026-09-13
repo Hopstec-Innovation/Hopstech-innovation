@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { Readable } from "node:stream";
 import { and, eq } from "drizzle-orm";
-import { engagementDocuments, clientProjectsExtended } from "../drizzle/schema";
+import { engagementDocuments, clientProjectsExtended, messages, chatConversations } from "../drizzle/schema";
 import { isInternalRole } from "../shared/roles";
 import { sdk } from "./_core/sdk";
 import { getDb } from "./db";
@@ -59,6 +59,31 @@ export function registerDocumentRoutes(app: Express) {
       Readable.fromWeb(result.stream as never).pipe(res);
     } catch {
       res.status(401).send("Sign in to view this document");
+    }
+  });
+
+  app.get("/api/chat-files/:messageId/:attachmentIndex", async (req, res) => {
+    try {
+      const user = await sdk.authenticateRequest(req);
+      const messageId = Number(req.params.messageId);
+      const attachmentIndex = Number(req.params.attachmentIndex);
+      if (!Number.isInteger(messageId) || !Number.isInteger(attachmentIndex) || attachmentIndex < 0) return res.status(400).send("Invalid attachment");
+      const db = await getDb();
+      if (!db) return res.status(503).send("File service unavailable");
+      const [row] = await db.select({ message: messages, clientId: chatConversations.clientId })
+        .from(messages).innerJoin(chatConversations, eq(chatConversations.id, messages.conversationId))
+        .where(eq(messages.id, messageId)).limit(1);
+      if (!row || (!isInternalRole(user.role) && row.clientId !== user.id)) return res.status(404).send("Attachment not found");
+      const attachment = row.message.attachments?.[attachmentIndex];
+      if (!attachment) return res.status(404).send("Attachment not found");
+      const result = await privateBlobGet(attachment.fileUrl);
+      if (!result || result.statusCode !== 200 || !result.stream) return res.status(404).send("Attachment not found");
+      res.setHeader("Content-Type", result.blob.contentType || attachment.fileType || "application/octet-stream");
+      res.setHeader("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(attachment.fileName)}`);
+      res.setHeader("Cache-Control", "private, max-age=60");
+      Readable.fromWeb(result.stream as never).pipe(res);
+    } catch {
+      res.status(401).send("Sign in to view this attachment");
     }
   });
 }

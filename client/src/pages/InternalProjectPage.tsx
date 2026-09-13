@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { isInternalRole } from "@shared/roles";
-import { workflowStages, shortDate } from "@/components/internal/workflow";
+import { workflowStages, shortDate, opsTeams } from "@/components/internal/workflow";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import LiveTracker from "@/components/project/LiveTracker";
 import { Link, useRoute } from "wouter";
@@ -364,15 +364,26 @@ const InternalProjectPage = () => {
               className="border-white/10 bg-slate-950 text-white"
             />
             <label className="text-xs text-slate-400">Department / team</label>
-            <Input
+            <select
               aria-label="Department"
-              placeholder="Department"
+              className="w-full rounded-md border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white"
               value={dispatch.department ?? project.department ?? ""}
               onChange={(e) =>
                 setDispatch((d) => ({ ...d, department: e.target.value }))
               }
-              className="border-white/10 bg-slate-950 text-white"
-            />
+            >
+              <option value="">No team assigned</option>
+              {Array.from(
+                new Set([
+                  ...opsTeams,
+                  ...(project.department ? [project.department] : []),
+                ])
+              ).map((team) => (
+                <option key={team} value={team}>
+                  {team}
+                </option>
+              ))}
+            </select>
             <label className="text-xs text-slate-400 block">Delivery lead</label>
             <select
               aria-label="Delivery lead"

@@ -27,6 +27,7 @@ import { TRPCError } from "@trpc/server";
 import { sendProjectInquiryEmail } from "./emailService";
 import { privateBlobPut } from "./blobStorage";
 import { nanoid } from "nanoid";
+import { routeClientChatMessage } from "./chatRouter";
 
 export const clientPortalRouter = router({
   /**
@@ -130,16 +131,17 @@ export const clientPortalRouter = router({
         })
         .returning();
 
-      return newProfile[0];
+      return { ...newProfile[0], name: ctx.user.name, email: ctx.user.email };
     }
 
-    return profile[0];
+    return { ...profile[0], name: ctx.user.name, email: ctx.user.email };
   }),
 
   // Update user profile
   updateProfile: protectedProcedure
     .input(
       z.object({
+        name: z.string().trim().min(1).max(120).optional(),
         avatar: z.string().optional(),
         bio: z.string().optional(),
         company: z.string().optional(),
@@ -154,10 +156,14 @@ export const clientPortalRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
 
+      const { name, ...profileInput } = input;
+      if (name) {
+        await db.update(users).set({ name, updatedAt: new Date() }).where(eq(users.id, ctx.user.id));
+      }
       const updated = await db
         .update(userProfiles)
         .set({
-          ...input,
+          ...profileInput,
           updatedAt: new Date(),
         })
         .where(eq(userProfiles.userId, ctx.user.id))
@@ -172,7 +178,7 @@ export const clientPortalRouter = router({
         metadata: { changes: input },
       });
 
-      return updated[0];
+      return { ...updated[0], name: name || ctx.user.name, email: ctx.user.email };
     }),
 
   // Update notification settings
@@ -883,38 +889,13 @@ export const clientPortalRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
-
-      const [message] = await db
-        .insert(messages)
-        .values({
-          senderId: ctx.user.id,
-          recipientId: input.recipientId,
-          projectId: input.projectId,
-          content: input.content,
-          type: "text",
-          read: false,
-          attachments: [],
-        })
-        .returning();
-
-      // Create notification for recipient
-      await db.insert(notifications).values({
-        userId: input.recipientId,
-        type: "message",
-        title: "New Message",
-        message: `You have a new message from ${ctx.user.name}`,
-        link: `/client-portal/messages/${message.id}`,
-        read: false,
-      });
-
-      return message;
+      const result = await routeClientChatMessage({ user: ctx.user, content: input.content, projectId: input.projectId });
+      return result.message;
     }),
 
   // Mark message as read
   markMessageRead: protectedProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.number().optional(), messageId: z.number().optional() }).refine(value => value.id || value.messageId, "Message ID required"))
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
@@ -924,7 +905,7 @@ export const clientPortalRouter = router({
         .set({ read: true, readAt: new Date() })
         .where(
           and(
-            eq(messages.id, input.id),
+            eq(messages.id, input.id || input.messageId!),
             eq(messages.recipientId, ctx.user.id)
           )
         );

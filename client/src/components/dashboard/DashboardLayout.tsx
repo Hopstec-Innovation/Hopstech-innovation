@@ -62,6 +62,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
 
   const { data: stats } = trpc.clientPortal.getDashboardStats.useQuery(undefined, {
     enabled: isAuthenticated,
+    refetchInterval: 3000,
   });
 
   const logoutMutation = trpc.magicLink.logout.useMutation({

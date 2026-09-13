@@ -20,7 +20,7 @@ import LiveTracker from '../project/LiveTracker';
 import './portal.css';
 
 const DashboardOverview = () => {
-  const { data: stats, isLoading: statsLoading } = trpc.clientPortal.getDashboardStats.useQuery();
+  const { data: stats, isLoading: statsLoading } = trpc.clientPortal.getDashboardStats.useQuery(undefined, { refetchInterval: 3000 });
   const { data: projectsData, isLoading: projectsLoading } = trpc.clientPortal.getProjects.useQuery({ 
     limit: 5, 
     offset: 0 
@@ -299,4 +299,3 @@ const DashboardOverview = () => {
 };
 
 export default DashboardOverview;
-

@@ -86,6 +86,7 @@ const ProfilePage = () => {
 
     // Update profile
     updateProfileMutation.mutate({
+      name: formData.name,
       bio: formData.bio,
       phone: formData.phone,
       company: formData.company,
@@ -408,4 +409,3 @@ const ProfilePage = () => {
 };
 
 export default ProfilePage;
-

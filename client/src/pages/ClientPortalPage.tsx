@@ -136,13 +136,16 @@ const ClientPortalPage = () => {
     if (isInternalRole(user.role)) {
       return <FullScreenLoader message="Opening engineering workspace..." />;
     }
+    const accountName = user.name?.trim() || "";
+    const emailName = user.email?.split("@")[0]?.toLowerCase() || "";
+    const firstName = accountName && accountName.toLowerCase() !== emailName ? accountName.split(/\s+/)[0] : "";
     return (
       <DashboardLayout>
         <main className="flex-1 overflow-y-auto">
           <div className="p-6">
             <div className="mb-8">
               <h1 className="portal-welcome-title">
-                Welcome back, {user.name}
+                Welcome back{firstName ? `, ${firstName}` : ""}
               </h1>
               <p className="portal-welcome-lede">
                 {user.jobTitle
