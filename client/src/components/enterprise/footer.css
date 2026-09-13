@@ -151,6 +151,23 @@
   color: #7e898d;
 }
 
+.site-footer-legal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+}
+
+.site-footer-legal a {
+  color: #8f9a9e;
+  text-decoration: none;
+  font-size: 13px;
+  transition: color 0.2s;
+}
+
+.site-footer-legal a:hover {
+  color: #b6e6cd;
+}
+
 .site-footer-social {
   display: flex;
   gap: 10px;

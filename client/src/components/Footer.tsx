@@ -119,6 +119,13 @@ const Footer = () => {
           <p className="site-footer-copy">
             © {currentYear} {enterpriseFooter.companyName}. All rights reserved.
           </p>
+          <nav className="site-footer-legal" aria-label="Legal">
+            {enterpriseFooter.legalLinks.map((link) => (
+              <Link key={link.label} href={link.href}>
+                <a>{link.label}</a>
+              </Link>
+            ))}
+          </nav>
           <div className="site-footer-social">
             {enterpriseFooter.socialLinks.map((link) => (
               <a

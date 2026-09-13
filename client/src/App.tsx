@@ -10,6 +10,8 @@ import { ScrollProgress } from "./components/animations/ScrollProgress";
 const HomePage = lazy(() => import("./pages/HomePage"));
 const ContactPage = lazy(() => import("./pages/ContactPage"));
 const CareersPage = lazy(() => import("./pages/CareersPage"));
+const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
+const TermsPage = lazy(() => import("./pages/TermsPage"));
 const AquaPulsePage = lazy(() => import("./pages/AquaPulsePage"));
 const ClientPortalPage = lazy(() => import("./pages/ClientPortalPage"));
 const AuthVerifyPage = lazy(() => import("./pages/AuthVerifyPage"));
@@ -39,6 +41,8 @@ function Router() {
       <Route path={"/portfolio/:slug"}>{() => <Redirect to="/" />}</Route>
       <Route path={"/contact"}>{() => <ContactPage />}</Route>
       <Route path={"/careers"}>{() => <CareersPage />}</Route>
+      <Route path={"/privacy"}>{() => <PrivacyPage />}</Route>
+      <Route path={"/terms"}>{() => <TermsPage />}</Route>
       <Route path={"/client-portal/projects/:id"}>{() => <ClientProjectDetailPage />}</Route>
       <Route path={"/client-portal/projects"}>{() => <ProjectsPage />}</Route>
       <Route path={"/client-portal/messages"}>{() => <MessagesPage />}</Route>

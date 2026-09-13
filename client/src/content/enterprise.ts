@@ -560,6 +560,10 @@ export const enterpriseFooter = {
     { label: "Client portal", href: "/client-portal" },
     { label: "Contact", href: "/contact" },
   ],
+  legalLinks: [
+    { label: "Privacy", href: "/privacy" },
+    { label: "Terms", href: "/terms" },
+  ],
   socialLinks: [
     {
       label: "LinkedIn",
