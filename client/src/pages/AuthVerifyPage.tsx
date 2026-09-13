@@ -12,6 +12,11 @@ const AuthVerifyPage = () => {
   const [status, setStatus] = useState<'verifying' | 'success' | 'error'>('verifying');
   const [errorMessage, setErrorMessage] = useState('');
   const [redirectPath, setRedirectPath] = useState('/client-portal');
+  const portalHint =
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('portal') === 'team'
+      ? 'team'
+      : 'client';
 
   const verifyMutation = trpc.magicLink.verifyMagicLink.useMutation({
     onSuccess: (data) => {
@@ -106,10 +111,16 @@ const AuthVerifyPage = () => {
                       The magic link may have expired or already been used.
                     </p>
                     <Button
-                      onClick={() => setLocation('/client-portal')}
+                      onClick={() =>
+                        setLocation(
+                          portalHint === 'team'
+                            ? '/internal/login'
+                            : '/client-portal'
+                        )
+                      }
                       className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                     >
-                      Request New Magic Link
+                      Request a new sign-in link
                     </Button>
                   </div>
                 )}

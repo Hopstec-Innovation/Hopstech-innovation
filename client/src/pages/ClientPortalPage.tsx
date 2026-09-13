@@ -13,17 +13,13 @@ import DashboardLayout from '../components/dashboard/DashboardLayout';
 import DashboardOverview from '../components/dashboard/DashboardOverview';
 import { FullScreenLoader } from '../components/ui/loading-spinner';
 import { COMPANY_NAME } from '@shared/const';
-import { accessRoleLabel, isInternalRole, type PortalAudience } from '@shared/roles';
+import { accessRoleLabel, isInternalRole } from '@shared/roles';
 import { useLocation } from 'wouter';
 import '../components/dashboard/portal.css';
 
 const ClientPortalPage = () => {
   const { isAuthenticated, user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
-  const [portalAudience, setPortalAudience] = useState<PortalAudience>(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get('portal') === 'team' ? 'team' : 'client';
-  });
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -98,7 +94,7 @@ const ClientPortalPage = () => {
     magicLinkMutation.mutate({
       email: magicLinkEmail,
       name: magicLinkName || undefined,
-      portal: portalAudience,
+      portal: 'client',
     });
   };
 
@@ -175,13 +171,13 @@ const ClientPortalPage = () => {
           <div className="mx-auto max-w-3xl text-center">
             <p className="portal-login-kicker">
               <i aria-hidden="true" />
-              {COMPANY_NAME} · Role-based portal
+              {COMPANY_NAME} · Client portal
             </p>
             <h1 className="mb-5 text-4xl font-medium tracking-tight text-white md:text-5xl">
               Access your <em className="font-serif italic text-[#b6e6cd]">dashboard</em>
             </h1>
             <p className="mx-auto max-w-2xl text-lg leading-7 text-gray-400">
-              Clients track delivery. Hopstec engineers run intake, quotation, commit, and live ops.
+              Passwordless sign-in for clients. Track projects, messages, and invoices in one place.
             </p>
           </div>
         </div>
@@ -224,53 +220,18 @@ const ClientPortalPage = () => {
                 Sign in
               </h2>
               <p className="text-gray-400">
-                Choose your role, then we send a secure magic link. No password.
+                Enter your email — we will send a secure link. No password needed.
               </p>
-            </div>
-
-            <div className="mb-4 grid grid-cols-2 gap-2 rounded-lg border border-white/10 bg-slate-950/60 p-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setPortalAudience('client');
-                  setMagicLinkSent(false);
-                }}
-                className={`rounded-md px-3 py-2 text-sm font-medium transition ${
-                  portalAudience === 'client'
-                    ? 'bg-[var(--hopstec-teal)] text-slate-950'
-                    : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                Client
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setPortalAudience('team');
-                  setMagicLinkSent(false);
-                }}
-                className={`rounded-md px-3 py-2 text-sm font-medium transition ${
-                  portalAudience === 'team'
-                    ? 'bg-[var(--hopstec-teal)] text-slate-950'
-                    : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                Hopstec team
-              </button>
             </div>
 
             <Card className="border-white/10 bg-slate-900/50 shadow-none">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-white">
                   <LogIn className="h-5 w-5 text-[var(--hopstec-teal)]" />
-                  {portalAudience === 'team'
-                    ? 'Engineering ops sign-in'
-                    : 'Client portal sign-in'}
+                  Client portal sign-in
                 </CardTitle>
                 <CardDescription className="text-gray-400">
-                  {portalAudience === 'team'
-                    ? 'For provisioned staff — Solutions Architect, Full-Stack, DevOps, Delivery, and related titles.'
-                    : 'New clients get an account on first successful sign-in.'}
+                  New clients get an account on first successful sign-in.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -298,7 +259,7 @@ const ClientPortalPage = () => {
                           magicLinkMutation.mutate({
                             email: magicLinkEmail,
                             name: magicLinkName || undefined,
-                            portal: portalAudience,
+                            portal: 'client',
                           });
                         }}
                         variant="outline"
@@ -343,11 +304,7 @@ const ClientPortalPage = () => {
                         value={magicLinkName}
                         onChange={(e) => setMagicLinkName(e.target.value)}
                         className="border-white/10 bg-slate-950 text-white"
-                        placeholder={
-                          portalAudience === 'team'
-                            ? 'e.g. Lead engineer'
-                            : 'Your name'
-                        }
+                        placeholder="Your name"
                       />
                     </div>
 
@@ -362,11 +319,7 @@ const ClientPortalPage = () => {
                         onChange={(e) => setMagicLinkEmail(e.target.value)}
                         required
                         className="border-white/10 bg-slate-950 text-white"
-                        placeholder={
-                          portalAudience === 'team'
-                            ? 'you@hopstecinnovation.com'
-                            : 'you@company.com'
-                        }
+                        placeholder="you@company.com"
                       />
                     </div>
 

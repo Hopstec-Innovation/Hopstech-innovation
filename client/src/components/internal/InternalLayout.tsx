@@ -4,7 +4,6 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { COMPANY_NAME } from "@shared/const";
 import { useAuth } from "@/hooks/useAuth";
 import { FullScreenLoader } from "@/components/ui/loading-spinner";
-import { getClientPortalLoginPath } from "@/const";
 import { accessRoleLabel, isInternalRole } from "@shared/roles";
 import "@/components/dashboard/portal.css";
 
@@ -24,7 +23,7 @@ const InternalLayout = ({
   useEffect(() => {
     if (isLoading) return;
     if (!isAuthenticated) {
-      setLocation(`${getClientPortalLoginPath()}?portal=team`);
+      setLocation("/internal/login");
       return;
     }
     if (!canAccess) {

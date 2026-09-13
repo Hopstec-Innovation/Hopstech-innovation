@@ -1,7 +1,14 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { publicProcedure, router } from "./_core/trpc";
-import { getDb, createMagicLink, getMagicLinkByToken, markMagicLinkAsUsed, getUserByEmail, upsertUser } from "./db";
+import {
+  getDb,
+  createMagicLink,
+  getMagicLinkByToken,
+  markMagicLinkAsUsed,
+  getUserByEmail,
+  upsertUser,
+} from "./db";
 import { nanoid } from "nanoid";
 import { sendMagicLinkEmail } from "./emailService";
 import { sdk } from "./_core/sdk";
@@ -14,6 +21,11 @@ import {
 } from "../shared/roles";
 
 const MAGIC_LINK_EXPIRY_MINUTES = 15;
+
+const STAFF_GENERIC_OK =
+  "If this account is authorised, a sign-in link has been sent.";
+
+const STAFF_GENERIC_FAIL = "Sign-in is not available for this account.";
 
 const sessionUser = (user: {
   id: number;
@@ -30,14 +42,51 @@ const sessionUser = (user: {
   dashboardPath: dashboardPathForRole(user.role),
 });
 
+function allowedStaffEmailDomains(): string[] {
+  const raw = process.env.STAFF_EMAIL_DOMAINS?.trim();
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((d) => d.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function emailAllowedForStaff(email: string): boolean {
+  const domains = allowedStaffEmailDomains();
+  if (domains.length === 0) return true;
+  const host = email.split("@")[1]?.toLowerCase();
+  return !!host && domains.includes(host);
+}
+
+function resolveOrigin(ctx: {
+  req?: { headers?: Record<string, unknown> };
+}): string {
+  if (process.env.APP_URL) {
+    return process.env.APP_URL.replace(/\/$/, "");
+  }
+
+  if (typeof ctx.req?.headers?.origin === "string" && ctx.req.headers.origin) {
+    return ctx.req.headers.origin.replace(/\/$/, "");
+  }
+
+  if (typeof ctx.req?.headers?.referer === "string" && ctx.req.headers.referer) {
+    try {
+      return new URL(ctx.req.headers.referer).origin;
+    } catch {
+      // Fall through.
+    }
+  }
+
+  return "https://hopstecinnovation.com";
+}
+
 export const magicLinkRouter = router({
-  // Request a magic link
   requestMagicLink: publicProcedure
     .input(
       z.object({
         email: z.string().email("Invalid email address"),
         name: z.string().min(2, "Name must be at least 2 characters").optional(),
-        /** Client self-serve vs Hopstec team (provisioned accounts only). */
+        /** client = public portal; team = staff console (provisioned only). */
         portal: z.enum(PORTAL_AUDIENCES).default("client"),
       })
     )
@@ -47,30 +96,36 @@ export const magicLinkRouter = router({
         throw new Error("Database not available");
       }
 
-      const { email, name, portal } = input;
+      const email = input.email.trim().toLowerCase();
+      const { name, portal } = input;
 
+      // Staff path: never reveal whether the email is provisioned.
       if (portal === "team") {
         const existing = await getUserByEmail(email);
-        if (!existing || !isInternalRole(existing.role)) {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message:
-              "This email is not provisioned for the Hopstec engineering console. Ask an admin to grant staff access.",
+        const authorised =
+          !!existing &&
+          isInternalRole(existing.role) &&
+          emailAllowedForStaff(email);
+
+        if (!authorised) {
+          console.warn("[MagicLink] Staff sign-in denied (no leak to client)", {
+            emailHost: email.split("@")[1],
           });
+          return { success: true, message: STAFF_GENERIC_OK };
         }
       }
 
-      // Get IP and user agent from request
-      const ip = ctx.req?.headers?.['x-forwarded-for'] as string || 
-                 ctx.req?.headers?.['x-real-ip'] as string ||
-                 'unknown';
-      const userAgent = ctx.req?.headers?.['user-agent'] || 'unknown';
+      const ip =
+        (ctx.req?.headers?.["x-forwarded-for"] as string) ||
+        (ctx.req?.headers?.["x-real-ip"] as string) ||
+        "unknown";
+      const userAgent = (ctx.req?.headers?.["user-agent"] as string) || "unknown";
 
-      // Generate unique token
       const token = nanoid(32);
-      const expiresAt = new Date(Date.now() + MAGIC_LINK_EXPIRY_MINUTES * 60 * 1000);
+      const expiresAt = new Date(
+        Date.now() + MAGIC_LINK_EXPIRY_MINUTES * 60 * 1000
+      );
 
-      // Create magic link in database
       await createMagicLink({
         email,
         token,
@@ -80,60 +135,36 @@ export const magicLinkRouter = router({
         userAgent,
       });
 
-      const resolveOrigin = () => {
-        if (process.env.APP_URL) {
-          return process.env.APP_URL.replace(/\/$/, "");
-        }
-
-        if (typeof ctx.req?.headers?.origin === "string" && ctx.req.headers.origin) {
-          return ctx.req.headers.origin.replace(/\/$/, "");
-        }
-
-        if (typeof ctx.req?.headers?.referer === "string" && ctx.req.headers.referer) {
-          try {
-            return new URL(ctx.req.headers.referer).origin;
-          } catch {
-            // Fall through to default.
-          }
-        }
-
-        return "https://hopstecinnovation.com";
-      };
-
-      const origin = resolveOrigin();
+      const origin = resolveOrigin(ctx);
       const magicLinkUrl = `${origin}/auth/verify?token=${token}&portal=${portal}`;
 
-      console.log("[MagicLink] Generated magic link:", {
-        origin,
-        portal,
-        hasAppUrl: !!process.env.APP_URL,
-        hasOriginHeader: !!ctx.req?.headers?.origin,
-        hasRefererHeader: !!ctx.req?.headers?.referer,
-      });
-
-      // Send email with magic link
       try {
         await sendMagicLinkEmail({
           to: email,
-          name: name || email.split('@')[0],
+          name: name || email.split("@")[0],
           magicLink: magicLinkUrl,
           expiresInMinutes: MAGIC_LINK_EXPIRY_MINUTES,
         });
 
         return {
           success: true,
-          message: "Magic link sent! Check your email to sign in.",
+          message:
+            portal === "team"
+              ? STAFF_GENERIC_OK
+              : "Magic link sent! Check your email to sign in.",
         };
       } catch (error) {
         console.error("[MagicLink] Failed to send email:", error);
-
-        // Preserve the original error message for better debugging
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (portal === "team") {
+          // Still generic — do not expose mail infra errors on staff surface.
+          return { success: true, message: STAFF_GENERIC_OK };
+        }
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
         throw new Error(`Failed to send magic link email: ${errorMessage}`);
       }
     }),
 
-  // Verify magic link token
   verifyMagicLink: publicProcedure
     .input(
       z.object({
@@ -144,44 +175,37 @@ export const magicLinkRouter = router({
     .mutation(async ({ input, ctx }) => {
       const { token, portal } = input;
 
-      // Get magic link from database
       const magicLink = await getMagicLinkByToken(token);
 
       if (!magicLink) {
         throw new Error("Invalid or expired magic link");
       }
 
-      // Check if already used
       if (magicLink.status === "used") {
         throw new Error("This magic link has already been used");
       }
 
-      // Check if expired
       if (new Date() > magicLink.expiresAt) {
         throw new Error("This magic link has expired");
       }
 
-      // Mark magic link as used
       await markMagicLinkAsUsed(token);
 
-      // Get or create user
       let user = await getUserByEmail(magicLink.email);
 
       if (!user) {
         if (portal === "team") {
           throw new TRPCError({
             code: "FORBIDDEN",
-            message:
-              "Hopstec team accounts must be provisioned by an admin before first sign-in.",
+            message: STAFF_GENERIC_FAIL,
           });
         }
 
-        // Create new user with magic link authentication
         const openId = `magic_${nanoid(16)}`;
         await upsertUser({
           openId,
           email: magicLink.email,
-          name: magicLink.email.split('@')[0],
+          name: magicLink.email.split("@")[0],
           loginMethod: "magic-link",
           role: "client",
           lastSignedIn: new Date(),
@@ -189,15 +213,18 @@ export const magicLinkRouter = router({
 
         user = await getUserByEmail(magicLink.email);
       } else {
-        if (portal === "team" && !isInternalRole(user.role)) {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message:
-              "This account is client-only. Ask an admin to grant staff or admin access.",
-          });
+        if (portal === "team") {
+          if (
+            !isInternalRole(user.role) ||
+            !emailAllowedForStaff(magicLink.email)
+          ) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: STAFF_GENERIC_FAIL,
+            });
+          }
         }
 
-        // Update last signed in
         await upsertUser({
           openId: user.openId,
           lastSignedIn: new Date(),
@@ -208,9 +235,21 @@ export const magicLinkRouter = router({
         throw new Error("Failed to create or retrieve user");
       }
 
-      // Create session token and set cookie
+      // Client portal magic link must not elevate into ops.
+      if (portal !== "team" && isInternalRole(user.role)) {
+        // Staff may still open a client session if they used the client flow,
+        // but verify destination stays role-based via dashboardPath.
+      }
+
+      if (portal === "team" && !isInternalRole(user.role)) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: STAFF_GENERIC_FAIL,
+        });
+      }
+
       const sessionToken = await sdk.createSessionToken(user.openId, {
-        name: user.name || user.email || '',
+        name: user.name || user.email || "",
       });
 
       const cookieOptions = getSessionCookieOptions(ctx.req);
@@ -223,29 +262,24 @@ export const magicLinkRouter = router({
       };
     }),
 
-  // Get current session
-  getCurrentSession: publicProcedure
-    .query(async ({ ctx }) => {
-      // Check if session exists
-      if (!ctx.user) {
-        return { authenticated: false, user: null };
-      }
+  getCurrentSession: publicProcedure.query(async ({ ctx }) => {
+    if (!ctx.user) {
+      return { authenticated: false, user: null };
+    }
 
-      return {
-        authenticated: true,
-        user: sessionUser(ctx.user),
-      };
-    }),
+    return {
+      authenticated: true,
+      user: sessionUser(ctx.user),
+    };
+  }),
 
-  // Logout
-  logout: publicProcedure
-    .mutation(async ({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+  logout: publicProcedure.mutation(async ({ ctx }) => {
+    const cookieOptions = getSessionCookieOptions(ctx.req);
+    ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
 
-      return {
-        success: true,
-        message: 'Logged out successfully',
-      };
-    }),
+    return {
+      success: true,
+      message: "Logged out successfully",
+    };
+  }),
 });

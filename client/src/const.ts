@@ -40,3 +40,6 @@ export const getLoginUrl = () => {
 };
 
 export const getClientPortalLoginPath = () => CLIENT_PORTAL_LOGIN_PATH;
+
+/** Staff console sign-in — not linked from the public site. */
+export const getInternalLoginPath = () => "/internal/login";
