@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, Loader2, Mail, Shield } from "lucide-react";
+import { CheckCircle2, Loader2, Mail } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -127,11 +127,6 @@ const InternalStaffLoginPage = () => {
             </form>
           )}
         </div>
-
-        <p className="mt-6 flex items-center justify-center gap-2 text-xs text-gray-600">
-          <Shield className="h-3.5 w-3.5" />
-          Not linked from the public site
-        </p>
       </div>
     </div>
   );
