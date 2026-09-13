@@ -23,11 +23,21 @@ build/
 .env.production
 .env.production.local
 
-# Deployment documentation with sensitive info
+# Deployment / internal documentation (sensitive — do not commit)
+# Only README.md is allowed as tracked markdown.
+*.md
+!README.md
+docs/
 VERCEL_DEPLOYMENT.md
 MIGRATION_SUMMARY.md
 DEPLOYMENT.md
 AQUAPULSE_APP_SETUP.local.md
+*.local.md
+*STRATEGY*.md
+*ENHANCEMENT*.md
+*ROADMAP*.md
+*PLAN*.md
+.cursor/plans/
 
 # Seed scripts that might contain sensitive data
 server/seedProjectTypes.ts

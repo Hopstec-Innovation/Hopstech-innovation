@@ -63,8 +63,10 @@ Our advanced client portal provides unprecedented transparency and control:
 
 ## Documentation
 
-- **[Client portal production checklist](docs/PORTAL_PRODUCTION.md)** — Vercel env vars, Resend, and magic-link smoke test
+- **[README](README.md)** — this file (public)
 - **[.env.example](.env.example)** — Environment variable template
+
+Internal runbooks, ops strategies, and production checklists stay local under `docs/` and are **not** committed.
 
 ## Getting Started
 
@@ -104,7 +106,7 @@ http://localhost:5000
 # Explore the new features!
 ```
 
-For portal go-live steps, see the [Client portal production checklist](docs/PORTAL_PRODUCTION.md).
+Copy `.env.example` to `.env` and fill in `DATABASE_URL`, `JWT_SECRET`, `RESEND_API_KEY`, and `APP_URL` for portal go-live.
 
 ## Contact
 
