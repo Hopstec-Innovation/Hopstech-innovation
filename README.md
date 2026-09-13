@@ -63,14 +63,8 @@ Our advanced client portal provides unprecedented transparency and control:
 
 ## Documentation
 
-Comprehensive documentation is available in the `/docs` directory:
-
-- **[Quick Start Guide](docs/QUICK_START.md)** - Get started in 5 minutes
-- **[Implementation Summary](docs/IMPLEMENTATION_SUMMARY.md)** - Complete feature overview
-- **[API Reference](docs/API_REFERENCE.md)** - tRPC API documentation
-- **[Testing Guide](docs/TESTING_GUIDE.md)** - Comprehensive testing instructions
-- **[Deployment Checklist](docs/DEPLOYMENT_CHECKLIST.md)** - Production deployment guide
-- **[Technical Specification](docs/CLIENT_PORTAL_ENHANCEMENTS.md)** - Detailed technical spec
+- **[Client portal production checklist](docs/PORTAL_PRODUCTION.md)** — Vercel env vars, Resend, and magic-link smoke test
+- **[.env.example](.env.example)** — Environment variable template
 
 ## Getting Started
 
@@ -110,7 +104,7 @@ http://localhost:5000
 # Explore the new features!
 ```
 
-For detailed setup instructions, see the [Quick Start Guide](docs/QUICK_START.md).
+For portal go-live steps, see the [Client portal production checklist](docs/PORTAL_PRODUCTION.md).
 
 ## Contact
 
