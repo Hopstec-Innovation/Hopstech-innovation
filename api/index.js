@@ -3976,55 +3976,26 @@ import { TRPCError as TRPCError7 } from "@trpc/server";
 import { nanoid as nanoid2 } from "nanoid";
 import { Resend as Resend3 } from "resend";
 
-// server/storage.ts
-function getStorageConfig() {
-  const baseUrl = ENV.forgeApiUrl;
-  const apiKey = ENV.forgeApiKey;
-  if (!baseUrl || !apiKey) {
-    throw new Error(
-      "Storage proxy credentials missing: set BUILT_IN_FORGE_API_URL and BUILT_IN_FORGE_API_KEY"
-    );
+// server/blobStorage.ts
+import { get, put } from "@vercel/blob";
+function requireBlobToken() {
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    throw new Error("BLOB_READ_WRITE_TOKEN is not configured");
   }
-  return { baseUrl: baseUrl.replace(/\/+$/, ""), apiKey };
 }
-function buildUploadUrl(baseUrl, relKey) {
-  const url = new URL("v1/storage/upload", ensureTrailingSlash(baseUrl));
-  url.searchParams.set("path", normalizeKey(relKey));
-  return url;
-}
-function ensureTrailingSlash(value) {
-  return value.endsWith("/") ? value : `${value}/`;
-}
-function normalizeKey(relKey) {
-  return relKey.replace(/^\/+/, "");
-}
-function toFormData(data, contentType, fileName) {
-  const blob = typeof data === "string" ? new Blob([data], { type: contentType }) : new Blob([data], { type: contentType });
-  const form = new FormData();
-  form.append("file", blob, fileName || "file");
-  return form;
-}
-function buildAuthHeaders(apiKey) {
-  return { Authorization: `Bearer ${apiKey}` };
-}
-async function storagePut(relKey, data, contentType = "application/octet-stream") {
-  const { baseUrl, apiKey } = getStorageConfig();
-  const key = normalizeKey(relKey);
-  const uploadUrl = buildUploadUrl(baseUrl, key);
-  const formData = toFormData(data, contentType, key.split("/").pop() ?? key);
-  const response = await fetch(uploadUrl, {
-    method: "POST",
-    headers: buildAuthHeaders(apiKey),
-    body: formData
+async function privateBlobPut(pathname, data, contentType) {
+  requireBlobToken();
+  const body = Buffer.isBuffer(data) ? data : Buffer.from(data);
+  const blob = await put(pathname.replace(/^\/+/, ""), body, {
+    access: "private",
+    addRandomSuffix: false,
+    contentType
   });
-  if (!response.ok) {
-    const message = await response.text().catch(() => response.statusText);
-    throw new Error(
-      `Storage upload failed (${response.status} ${response.statusText}): ${message}`
-    );
-  }
-  const url = (await response.json()).url;
-  return { key, url };
+  return { key: blob.pathname, url: blob.url };
+}
+async function privateBlobGet(urlOrPathname) {
+  requireBlobToken();
+  return get(urlOrPathname, { access: "private" });
 }
 
 // server/opsRouter.ts
@@ -4136,7 +4107,7 @@ var opsRouter = router({
     if (!bytes.length || bytes.length > 7 * 1024 * 1024) throw new TRPCError7({ code: "PAYLOAD_TOO_LARGE", message: "Choose a document smaller than 7 MB." });
     const safeName = input.fileName.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "document";
     try {
-      return await storagePut(`engagements/${input.projectId}/${Date.now()}-${nanoid2(8)}-${safeName}`, bytes, input.contentType);
+      return await privateBlobPut(`engagements/${input.projectId}/${Date.now()}-${nanoid2(8)}-${safeName}`, bytes, input.contentType);
     } catch {
       console.error("[Ops] Commercial document upload failed");
       throw new TRPCError7({ code: "INTERNAL_SERVER_ERROR", message: "File storage is unavailable. Ask an administrator to configure document storage, or paste a secure document link." });
@@ -4298,7 +4269,7 @@ var opsRouter = router({
           to: client.email,
           clientName: client.name || "there",
           projectTitle: project.title,
-          quotationUrl: doc.fileUrl,
+          quotationUrl: `${process.env.APP_URL || "https://hopstecinnovation.com"}/client-portal/projects/${project.id}`,
           notes: doc.notes
         });
         emailSent = delivery.sent;
@@ -4644,11 +4615,58 @@ async function createContext(opts) {
   };
 }
 
+// server/documentRoutes.ts
+import { Readable } from "node:stream";
+import { and as and7, eq as eq9 } from "drizzle-orm";
+function registerDocumentRoutes(app2) {
+  app2.get("/api/documents/:id", async (req, res) => {
+    try {
+      const user = await sdk.authenticateRequest(req);
+      const documentId = Number(req.params.id);
+      if (!Number.isInteger(documentId) || documentId <= 0) {
+        return res.status(400).send("Invalid document");
+      }
+      const db = await getDb();
+      if (!db) return res.status(503).send("Document service unavailable");
+      const [row] = await db.select({
+        document: engagementDocuments,
+        ownerId: clientProjectsExtended.userId
+      }).from(engagementDocuments).innerJoin(
+        clientProjectsExtended,
+        eq9(clientProjectsExtended.id, engagementDocuments.projectId)
+      ).where(and7(eq9(engagementDocuments.id, documentId))).limit(1);
+      if (!row || !isInternalRole(user.role) && row.ownerId !== user.id) {
+        return res.status(404).send("Document not found");
+      }
+      if (!isInternalRole(user.role) && row.document.type === "quotation" && row.document.status === "draft") {
+        return res.status(404).send("Document not found");
+      }
+      const result = await privateBlobGet(row.document.fileUrl);
+      if (!result || result.statusCode !== 200 || !result.stream) {
+        return res.status(404).send("Document not found");
+      }
+      res.setHeader(
+        "Content-Type",
+        result.blob.contentType || "application/octet-stream"
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename*=UTF-8''${encodeURIComponent(row.document.fileName)}`
+      );
+      res.setHeader("Cache-Control", "private, max-age=60");
+      Readable.fromWeb(result.stream).pipe(res);
+    } catch {
+      res.status(401).send("Sign in to view this document");
+    }
+  });
+}
+
 // server/_core/vercel.ts
 var app = express();
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 registerOAuthRoutes(app);
+registerDocumentRoutes(app);
 app.use(
   "/api/trpc",
   createExpressMiddleware({

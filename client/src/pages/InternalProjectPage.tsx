@@ -224,7 +224,7 @@ const InternalProjectPage = () => {
                       {doc.type.toUpperCase()} · {doc.fileName}
                     </p>
                     <a
-                      href={doc.fileUrl}
+                      href={`/api/documents/${doc.id}`}
                       target="_blank"
                       rel="noreferrer"
                       className="text-xs text-[var(--hopstec-teal)]"

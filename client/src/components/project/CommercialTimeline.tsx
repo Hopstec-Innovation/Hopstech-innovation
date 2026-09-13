@@ -101,7 +101,7 @@ const CommercialTimeline = ({
           {docs.map((doc) => (
             <a
               key={doc.id}
-              href={doc.fileUrl}
+              href={`/api/documents/${doc.id}`}
               target="_blank"
               rel="noreferrer"
               className="flex items-center justify-between rounded-lg border border-white/10 px-3 py-2 text-sm text-gray-300 hover:border-[var(--hopstec-teal)]/30"
