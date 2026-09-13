@@ -16,7 +16,7 @@ import {
 } from "../drizzle/schema";
 import { COMPANY_NAME } from "../shared/const";
 import { Resend } from "resend";
-import { storagePut } from "./storage";
+import { privateBlobPut } from "./blobStorage";
 
 const INTERNAL_FIELDS = [
   "serviceLine",
@@ -155,7 +155,7 @@ export const opsRouter = router({
       const bytes = Buffer.from(input.base64, "base64");
       if (!bytes.length || bytes.length > 7 * 1024 * 1024) throw new TRPCError({ code: "PAYLOAD_TOO_LARGE", message: "Choose a document smaller than 7 MB." });
       const safeName = input.fileName.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "document";
-      try { return await storagePut(`engagements/${input.projectId}/${Date.now()}-${nanoid(8)}-${safeName}`, bytes, input.contentType); }
+      try { return await privateBlobPut(`engagements/${input.projectId}/${Date.now()}-${nanoid(8)}-${safeName}`, bytes, input.contentType); }
       catch { console.error("[Ops] Commercial document upload failed"); throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "File storage is unavailable. Ask an administrator to configure document storage, or paste a secure document link." }); }
     }),
 
@@ -421,7 +421,7 @@ export const opsRouter = router({
           to: client.email,
           clientName: client.name || "there",
           projectTitle: project.title,
-          quotationUrl: doc.fileUrl,
+          quotationUrl: `${process.env.APP_URL || "https://hopstecinnovation.com"}/client-portal/projects/${project.id}`,
           notes: doc.notes,
         });
         emailSent = delivery.sent;
