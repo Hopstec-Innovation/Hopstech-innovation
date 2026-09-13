@@ -54,9 +54,21 @@ function allowedStaffEmailDomains(): string[] {
 
 function emailAllowedForStaff(email: string): boolean {
   const domains = allowedStaffEmailDomains();
+  // No allowlist configured → any provisioned staff/admin email is fine.
   if (domains.length === 0) return true;
   const host = email.split("@")[1]?.toLowerCase();
   return !!host && domains.includes(host);
+}
+
+/** Already-provisioned internal users always pass; domain allowlist is optional hardening only. */
+function canRequestStaffMagicLink(
+  user: { role: string; email: string | null } | undefined,
+  email: string
+): boolean {
+  if (!user || !isInternalRole(user.role)) return false;
+  // Admins are never blocked by STAFF_EMAIL_DOMAINS (founder may use personal mail).
+  if (user.role === "admin") return true;
+  return emailAllowedForStaff(email);
 }
 
 function resolveOrigin(ctx: {
@@ -103,10 +115,7 @@ export const magicLinkRouter = router({
       // Staff path: never reveal whether the email is provisioned.
       if (portal === "team") {
         const existing = await getUserByEmail(email);
-        const authorised =
-          !!existing &&
-          isInternalRole(existing.role) &&
-          emailAllowedForStaff(email);
+        const authorised = canRequestStaffMagicLink(existing, email);
 
         if (!authorised) {
           console.warn("[MagicLink] Staff sign-in denied (no leak to client)", {
@@ -225,10 +234,7 @@ export const magicLinkRouter = router({
           user = await getUserByEmail(magicLink.email);
         } else {
           if (portal === "team") {
-            if (
-              !isInternalRole(user.role) ||
-              !emailAllowedForStaff(magicLink.email)
-            ) {
+            if (!canRequestStaffMagicLink(user, magicLink.email)) {
               throw new TRPCError({
                 code: "FORBIDDEN",
                 message: STAFF_GENERIC_FAIL,
