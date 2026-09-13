@@ -13,7 +13,7 @@ var UNAUTHED_ERR_MSG = "Please login (10001)";
 var NOT_ADMIN_ERR_MSG = "You do not have required permission (10002)";
 
 // server/db.ts
-import { eq, and, gt } from "drizzle-orm";
+import { eq, and, gt, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/neon-http";
 import { neon } from "@neondatabase/serverless";
 
@@ -31,7 +31,7 @@ import {
   index,
   uniqueIndex
 } from "drizzle-orm/pg-core";
-var userRoleEnum = pgEnum("user_role", ["user", "admin", "client"]);
+var userRoleEnum = pgEnum("user_role", ["user", "admin", "client", "staff"]);
 var contactStatusEnum = pgEnum("contact_status", ["new", "read", "replied", "archived"]);
 var magicLinkStatusEnum = pgEnum("magic_link_status", ["pending", "used", "expired"]);
 var projectInquiryStatusEnum = pgEnum("project_inquiry_status", ["new", "reviewing", "accepted", "rejected"]);
@@ -53,6 +53,28 @@ var statusChangeRequestTypeEnum = pgEnum("status_change_request_type", ["pause",
 var statusChangeRequestStatusEnum = pgEnum("status_change_request_status", ["pending", "approved", "rejected"]);
 var phaseStatusEnum = pgEnum("phase_status", ["pending", "in_progress", "completed", "skipped"]);
 var progressCalculationMethodEnum = pgEnum("progress_calculation_method", ["milestone", "phase", "deliverable", "hybrid", "manual"]);
+var liveRunStatusEnum = pgEnum("live_run_status", ["active", "paused", "completed", "cancelled"]);
+var liveStepStatusEnum = pgEnum("live_step_status", ["pending", "active", "done", "skipped"]);
+var commercialStageEnum = pgEnum("commercial_stage", [
+  "intake",
+  "quoting",
+  "awaiting_po",
+  "committed",
+  "in_delivery",
+  "closed"
+]);
+var engagementDocTypeEnum = pgEnum("engagement_doc_type", [
+  "sow",
+  "rfq",
+  "quotation",
+  "po"
+]);
+var engagementDocStatusEnum = pgEnum("engagement_doc_status", [
+  "draft",
+  "sent",
+  "received",
+  "approved"
+]);
 var users = pgTable("users", {
   /**
    * Surrogate primary key. Auto-incremented numeric value managed by the database.
@@ -64,7 +86,10 @@ var users = pgTable("users", {
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
+  /** Access role: client portal vs Hopstec team (staff/admin). */
   role: userRoleEnum("role").default("user").notNull(),
+  /** Engineering / delivery title for staff (e.g. Full-Stack Engineer). */
+  jobTitle: varchar("jobTitle", { length: 120 }),
   createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn", { mode: "date", withTimezone: true }).defaultNow().notNull()
@@ -332,6 +357,16 @@ var clientProjectsExtended = pgTable("clientProjectsExtended", {
   // References paymentPlans.id (no FK to avoid circular dependency)
   lastProgressUpdate: timestamp("lastProgressUpdate", { mode: "date", withTimezone: true }),
   lastProgressUpdateBy: integer("lastProgressUpdateBy").references(() => users.id),
+  // Commercial gate (SOW/RFQ → quotation → PO → commit)
+  commercialStage: commercialStageEnum("commercialStage").default("intake").notNull(),
+  commitDate: timestamp("commitDate", { mode: "date", withTimezone: true }),
+  quotationAcceptedAt: timestamp("quotationAcceptedAt", { mode: "date", withTimezone: true }),
+  poReceivedAt: timestamp("poReceivedAt", { mode: "date", withTimezone: true }),
+  // Internal dispatch (never expose on client selects)
+  serviceLine: varchar("serviceLine", { length: 120 }),
+  department: varchar("department", { length: 120 }),
+  leadAssigneeId: integer("leadAssigneeId").references(() => users.id),
+  internalNotes: text("internalNotes"),
   createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
   completedAt: timestamp("completedAt", { mode: "date", withTimezone: true })
@@ -339,7 +374,9 @@ var clientProjectsExtended = pgTable("clientProjectsExtended", {
   userIdIdx: index("client_projects_ext_user_id_idx").on(table.userId),
   statusIdx: index("client_projects_ext_status_idx").on(table.status),
   createdAtIdx: index("client_projects_ext_created_at_idx").on(table.createdAt),
-  currentPhaseIdIdx: index("client_projects_ext_current_phase_id_idx").on(table.currentPhaseId)
+  currentPhaseIdIdx: index("client_projects_ext_current_phase_id_idx").on(table.currentPhaseId),
+  commercialStageIdx: index("client_projects_ext_commercial_stage_idx").on(table.commercialStage),
+  leadAssigneeIdx: index("client_projects_ext_lead_assignee_idx").on(table.leadAssigneeId)
 }));
 var projectTypes = pgTable("projectTypes", {
   id: serial("id").primaryKey(),
@@ -617,6 +654,71 @@ var projectStatusChanges = pgTable("projectStatusChanges", {
   statusIdx: index("project_status_changes_status_idx").on(table.status),
   createdAtIdx: index("project_status_changes_created_at_idx").on(table.createdAt)
 }));
+var projectLiveRuns = pgTable("projectLiveRuns", {
+  id: serial("id").primaryKey(),
+  projectId: integer("projectId").notNull().references(() => clientProjectsExtended.id, { onDelete: "cascade" }),
+  title: varchar("title", { length: 255 }).notNull(),
+  status: liveRunStatusEnum("status").default("active").notNull(),
+  currentStepId: integer("currentStepId"),
+  notes: text("notes"),
+  startedAt: timestamp("startedAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+  completedAt: timestamp("completedAt", { mode: "date", withTimezone: true }),
+  createdBy: integer("createdBy").references(() => users.id),
+  updatedAt: timestamp("updatedAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).defaultNow().notNull()
+}, (table) => ({
+  projectIdIdx: index("project_live_runs_project_id_idx").on(table.projectId),
+  statusIdx: index("project_live_runs_status_idx").on(table.status)
+}));
+var projectLiveSteps = pgTable("projectLiveSteps", {
+  id: serial("id").primaryKey(),
+  runId: integer("runId").notNull().references(() => projectLiveRuns.id, { onDelete: "cascade" }),
+  label: varchar("label", { length: 255 }).notNull(),
+  description: text("description"),
+  orderIndex: integer("orderIndex").default(0).notNull(),
+  status: liveStepStatusEnum("status").default("pending").notNull(),
+  startedAt: timestamp("startedAt", { mode: "date", withTimezone: true }),
+  completedAt: timestamp("completedAt", { mode: "date", withTimezone: true }),
+  skippedReason: text("skippedReason"),
+  createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date", withTimezone: true }).defaultNow().notNull()
+}, (table) => ({
+  runIdIdx: index("project_live_steps_run_id_idx").on(table.runId),
+  statusIdx: index("project_live_steps_status_idx").on(table.status),
+  orderIdx: index("project_live_steps_order_idx").on(table.orderIndex)
+}));
+var engagementDocuments = pgTable("engagementDocuments", {
+  id: serial("id").primaryKey(),
+  projectId: integer("projectId").notNull().references(() => clientProjectsExtended.id, { onDelete: "cascade" }),
+  type: engagementDocTypeEnum("type").notNull(),
+  status: engagementDocStatusEnum("status").default("draft").notNull(),
+  fileName: varchar("fileName", { length: 255 }).notNull(),
+  fileUrl: text("fileUrl").notNull(),
+  version: integer("version").default(1).notNull(),
+  notes: text("notes"),
+  uploadedBy: integer("uploadedBy").references(() => users.id),
+  uploadedByRole: varchar("uploadedByRole", { length: 32 }).default("staff"),
+  createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date", withTimezone: true }).defaultNow().notNull()
+}, (table) => ({
+  projectIdIdx: index("engagement_documents_project_id_idx").on(table.projectId),
+  typeIdx: index("engagement_documents_type_idx").on(table.type),
+  statusIdx: index("engagement_documents_status_idx").on(table.status)
+}));
+var engagementEvents = pgTable("engagementEvents", {
+  id: serial("id").primaryKey(),
+  projectId: integer("projectId").notNull().references(() => clientProjectsExtended.id, { onDelete: "cascade" }),
+  type: varchar("type", { length: 80 }).notNull(),
+  message: text("message").notNull(),
+  isInternal: boolean("isInternal").default(false).notNull(),
+  actorId: integer("actorId").references(() => users.id),
+  metadata: jsonb("metadata").$type(),
+  createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).defaultNow().notNull()
+}, (table) => ({
+  projectIdIdx: index("engagement_events_project_id_idx").on(table.projectId),
+  typeIdx: index("engagement_events_type_idx").on(table.type),
+  createdAtIdx: index("engagement_events_created_at_idx").on(table.createdAt)
+}));
 
 // server/_core/env.ts
 var ENV = {
@@ -635,8 +737,8 @@ var _db = null;
 async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      const sql2 = neon(process.env.DATABASE_URL);
-      _db = drizzle(sql2);
+      const sql3 = neon(process.env.DATABASE_URL);
+      _db = drizzle(sql3);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
@@ -658,7 +760,7 @@ async function upsertUser(user) {
       openId: user.openId
     };
     const updateSet = {};
-    const textFields = ["name", "email", "loginMethod"];
+    const textFields = ["name", "email", "loginMethod", "jobTitle"];
     const assignNullable = (field) => {
       const value = user[field];
       if (value === void 0) return;
@@ -708,7 +810,8 @@ async function getUserByEmail(email) {
     console.warn("[Database] Cannot get user: database not available");
     return void 0;
   }
-  const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  const normalized = email.trim().toLowerCase();
+  const result = await db.select().from(users).where(sql`lower(${users.email}) = ${normalized}`).limit(1);
   return result.length > 0 ? result[0] : void 0;
 }
 async function createMagicLink(data) {
@@ -755,8 +858,9 @@ function getSessionCookieOptions(req) {
   return {
     httpOnly: true,
     path: "/",
-    // Use 'lax' for localhost (non-HTTPS), 'none' for production (HTTPS)
-    sameSite: isSecure ? "none" : "lax",
+    // First-party portal sessions: Lax works for magic-link email clicks
+    // and same-origin API calls. Avoid SameSite=None unless cross-site OAuth needs it.
+    sameSite: "lax",
     secure: isSecure
   };
 }
@@ -782,12 +886,13 @@ var GET_USER_INFO_WITH_JWT_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserInf
 var OAuthService = class {
   constructor(client) {
     this.client = client;
-    console.log("[OAuth] Initialized with baseURL:", ENV.oAuthServerUrl);
     if (!ENV.oAuthServerUrl) {
-      console.error(
-        "[OAuth] ERROR: OAUTH_SERVER_URL is not configured! Set OAUTH_SERVER_URL environment variable."
+      console.info(
+        "[OAuth] OAUTH_SERVER_URL is not set. Client portal will use magic-link authentication."
       );
+      return;
     }
+    console.log("[OAuth] Initialized with baseURL:", ENV.oAuthServerUrl);
   }
   decodeState(state) {
     const redirectUri = atob(state);
@@ -961,6 +1066,12 @@ var SDKServer = class {
     const signedInAt = /* @__PURE__ */ new Date();
     let user = await getUserByOpenId(sessionUserId);
     if (!user) {
+      if (!ENV.oAuthServerUrl) {
+        console.warn(
+          "[Auth] Session valid but user missing from database. OAuth sync skipped (magic-link mode)."
+        );
+        throw ForbiddenError("User not found");
+      }
       try {
         const userInfo = await this.getUserInfoWithJwt(sessionCookie ?? "");
         await upsertUser({
@@ -1114,18 +1225,133 @@ async function notifyOwner(payload) {
   }
 }
 
+// shared/roles.ts
+var PORTAL_AUDIENCES = ["client", "team"];
+var STAFF_JOB_TITLES = [
+  "Founder & Lead Engineer",
+  "Solutions Architect",
+  "Full-Stack Engineer",
+  "Backend Engineer",
+  "Frontend Engineer",
+  "Mobile Engineer",
+  "DevOps / Platform Engineer",
+  "IoT / Embedded Engineer",
+  "Delivery Manager",
+  "Technical Consultant",
+  "QA / Reliability Engineer"
+];
+function isInternalRole(role) {
+  return role === "admin" || role === "staff";
+}
+function dashboardPathForRole(role) {
+  return isInternalRole(role) ? "/internal" : "/client-portal";
+}
+
 // server/_core/trpc.ts
-import { initTRPC, TRPCError as TRPCError2 } from "@trpc/server";
+import { initTRPC, TRPCError as TRPCError3 } from "@trpc/server";
 import superjson from "superjson";
+
+// server/_core/safeError.ts
+import { TRPCError as TRPCError2 } from "@trpc/server";
+var ALLOWED_PUBLIC_MESSAGES = /* @__PURE__ */ new Set([
+  "Please login (10001)",
+  "You do not have required permission (10002)",
+  "Hopstec team access required",
+  "Invalid or expired magic link",
+  "This magic link has already been used",
+  "This magic link has expired",
+  "No verification token found in URL",
+  "Sign-in is not available for this account.",
+  "If this account is authorised, a sign-in link has been sent.",
+  "Magic link sent! Check your email to sign in.",
+  "Logged out successfully"
+]);
+var GENERIC_PUBLIC = "Something went wrong. Please try again or request a new sign-in link.";
+var AUTH_VERIFY_GENERIC = "We could not complete sign-in. The link may have expired or already been used.";
+function looksLikeInternalError(message) {
+  const lower = message.toLowerCase();
+  return lower.includes("failed query") || lower.includes("select ") || lower.includes("insert ") || lower.includes("update ") || lower.includes("delete ") || lower.includes(" from ") || lower.includes("params:") || lower.includes("column ") || lower.includes("relation ") || lower.includes("does not exist") || lower.includes("syntax error") || lower.includes("neon") || lower.includes("postgres") || lower.includes("drizzle") || lower.includes("database") || lower.includes("connection") || lower.includes("econnrefused") || lower.includes("jwt") || lower.includes("secret") || /@/.test(message) || /\/[^\s]+/.test(message);
+}
+function sanitizePublicErrorMessage(message, context = "default") {
+  if (!message?.trim()) {
+    return context === "auth" ? AUTH_VERIFY_GENERIC : GENERIC_PUBLIC;
+  }
+  const trimmed = message.trim();
+  if (ALLOWED_PUBLIC_MESSAGES.has(trimmed)) {
+    return trimmed;
+  }
+  if (looksLikeInternalError(trimmed)) {
+    return context === "auth" ? AUTH_VERIFY_GENERIC : GENERIC_PUBLIC;
+  }
+  if (trimmed.length <= 120 && !looksLikeInternalError(trimmed)) {
+    return trimmed;
+  }
+  return context === "auth" ? AUTH_VERIFY_GENERIC : GENERIC_PUBLIC;
+}
+function toPublicTrpcError(error, context = "default") {
+  if (error instanceof TRPCError2) {
+    throw new TRPCError2({
+      code: error.code,
+      message: sanitizePublicErrorMessage(error.message, context)
+    });
+  }
+  const message = error instanceof Error ? error.message : String(error ?? "Unknown error");
+  console.error("[API] Internal error:", error);
+  throw new TRPCError2({
+    code: "INTERNAL_SERVER_ERROR",
+    message: sanitizePublicErrorMessage(message, context)
+  });
+}
+
+// server/_core/trpc.ts
+var isProd = process.env.NODE_ENV === "production";
 var t = initTRPC.context().create({
-  transformer: superjson
+  transformer: superjson,
+  errorFormatter({ shape, error }) {
+    const message = sanitizePublicErrorMessage(shape.message);
+    return {
+      ...shape,
+      message,
+      data: {
+        ...shape.data,
+        stack: isProd ? void 0 : error.stack
+      }
+    };
+  }
 });
 var router = t.router;
 var publicProcedure = t.procedure;
 var requireUser = t.middleware(async (opts) => {
   const { ctx, next } = opts;
   if (!ctx.user) {
-    throw new TRPCError2({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
+    throw new TRPCError3({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
+  }
+  return next({
+    ctx: {
+      ...ctx,
+      user: ctx.user
+    }
+  });
+});
+var requireAdmin = t.middleware(async (opts) => {
+  const { ctx, next } = opts;
+  if (!ctx.user || ctx.user.role !== "admin") {
+    throw new TRPCError3({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+  }
+  return next({
+    ctx: {
+      ...ctx,
+      user: ctx.user
+    }
+  });
+});
+var requireStaff = t.middleware(async (opts) => {
+  const { ctx, next } = opts;
+  if (!ctx.user || !isInternalRole(ctx.user.role)) {
+    throw new TRPCError3({
+      code: "FORBIDDEN",
+      message: "Hopstec team access required"
+    });
   }
   return next({
     ctx: {
@@ -1135,20 +1361,8 @@ var requireUser = t.middleware(async (opts) => {
   });
 });
 var protectedProcedure = t.procedure.use(requireUser);
-var adminProcedure = t.procedure.use(
-  t.middleware(async (opts) => {
-    const { ctx, next } = opts;
-    if (!ctx.user || ctx.user.role !== "admin") {
-      throw new TRPCError2({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
-    }
-    return next({
-      ctx: {
-        ...ctx,
-        user: ctx.user
-      }
-    });
-  })
-);
+var adminProcedure = t.procedure.use(requireAdmin);
+var staffProcedure = t.procedure.use(requireStaff);
 
 // server/_core/systemRouter.ts
 var systemRouter = router({
@@ -1319,8 +1533,11 @@ async function sendMagicLinkEmail(data) {
       console.log(`Link: ${data.magicLink}`);
       console.log(`Expires in: ${data.expiresInMinutes} minutes`);
       console.log("==============================================\n");
+      return;
     }
-    return;
+    throw new Error(
+      "Email delivery is not configured. Please contact Hopstec support or try again later."
+    );
   }
   const htmlContent = `
     <!DOCTYPE html>
@@ -1328,72 +1545,69 @@ async function sendMagicLinkEmail(data) {
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Sign in to HOPSTECH INNOVATION</title>
+      <title>Sign in to ${COMPANY_NAME}</title>
     </head>
-    <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #0f172a;">
-      <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0f172a; padding: 40px 20px;">
+    <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #070b12;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #070b12; padding: 40px 20px;">
         <tr>
           <td align="center">
-            <table width="600" cellpadding="0" cellspacing="0" style="background-color: #1e293b; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
-              <!-- Header -->
+            <table width="600" cellpadding="0" cellspacing="0" style="background-color: #0c121c; border-radius: 16px; overflow: hidden; border: 1px solid #ffffff18;">
               <tr>
-                <td style="background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); padding: 40px 30px; text-align: center;">
-                  <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700;">
-                    HOPSTECH INNOVATION
+                <td style="background-color: #0a101a; padding: 36px 30px; text-align: center; border-bottom: 1px solid #ffffff14;">
+                  <div style="display: inline-block; width: 48px; height: 4px; background-color: #00C896; border-radius: 999px; margin-bottom: 18px;"></div>
+                  <h1 style="margin: 0; color: #ffffff; font-size: 26px; font-weight: 600; letter-spacing: -0.03em;">
+                    ${COMPANY_NAME}
                   </h1>
-                  <p style="margin: 10px 0 0 0; color: #e0e7ff; font-size: 14px;">
-                    Client Portal Access
+                  <p style="margin: 10px 0 0 0; color: #a9e5c7; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase;">
+                    Client portal
                   </p>
                 </td>
               </tr>
-              
-              <!-- Content -->
+
               <tr>
                 <td style="padding: 40px 30px;">
-                  <h2 style="margin: 0 0 20px 0; color: #f1f5f9; font-size: 24px; font-weight: 600;">
-                    Hi ${data.name}! \u{1F44B}
+                  <h2 style="margin: 0 0 16px 0; color: #f5f7f6; font-size: 22px; font-weight: 600; letter-spacing: -0.02em;">
+                    Hi ${data.name},
                   </h2>
-                  
-                  <p style="margin: 0 0 20px 0; color: #cbd5e1; font-size: 16px; line-height: 1.6;">
-                    Click the button below to securely sign in to your HOPSTECH INNOVATION client portal. This link will expire in <strong style="color: #f1f5f9;">${data.expiresInMinutes} minutes</strong>.
+
+                  <p style="margin: 0 0 20px 0; color: #a2abad; font-size: 16px; line-height: 1.65;">
+                    Use the secure link below to sign in to your ${COMPANY_NAME} client portal. This link expires in <strong style="color: #f5f7f6;">${data.expiresInMinutes} minutes</strong>.
                   </p>
-                  
-                  <!-- CTA Button -->
-                  <table width="100%" cellpadding="0" cellspacing="0" style="margin: 30px 0;">
+
+                  <table width="100%" cellpadding="0" cellspacing="0" style="margin: 28px 0;">
                     <tr>
                       <td align="center">
-                        <a href="${data.magicLink}" style="display: inline-block; padding: 16px 40px; background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); color: #ffffff; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: 600; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);">
-                          Sign In to Client Portal
+                        <a href="${data.magicLink}" style="display: inline-block; padding: 14px 32px; background-color: #00C896; color: #020617; text-decoration: none; border-radius: 10px; font-size: 15px; font-weight: 600;">
+                          Sign in to portal
                         </a>
                       </td>
                     </tr>
                   </table>
-                  
-                  <p style="margin: 30px 0 0 0; color: #94a3b8; font-size: 14px; line-height: 1.6;">
-                    If the button doesn't work, copy and paste this link into your browser:
+
+                  <p style="margin: 24px 0 0 0; color: #8f9a9e; font-size: 13px; line-height: 1.6;">
+                    If the button does not work, copy and paste this link into your browser:
                   </p>
-                  <p style="margin: 10px 0 0 0; padding: 12px; background-color: #0f172a; border-radius: 6px; word-break: break-all;">
-                    <a href="${data.magicLink}" style="color: #60a5fa; text-decoration: none; font-size: 13px;">
+                  <p style="margin: 10px 0 0 0; padding: 12px; background-color: #070b12; border: 1px solid #ffffff12; border-radius: 8px; word-break: break-all;">
+                    <a href="${data.magicLink}" style="color: #a9e5c7; text-decoration: none; font-size: 12px;">
                       ${data.magicLink}
                     </a>
                   </p>
                 </td>
               </tr>
-              
-              <!-- Footer -->
+
               <tr>
-                <td style="padding: 30px; background-color: #0f172a; border-top: 1px solid #334155;">
-                  <p style="margin: 0 0 10px 0; color: #64748b; font-size: 13px; text-align: center;">
-                    This email was sent to <strong style="color: #94a3b8;">${data.to}</strong>
+                <td style="padding: 28px 30px; background-color: #080c14; border-top: 1px solid #ffffff12;">
+                  <p style="margin: 0 0 8px 0; color: #7e898d; font-size: 13px; text-align: center;">
+                    Sent to <strong style="color: #a2abad;">${data.to}</strong>
                   </p>
-                  <p style="margin: 0; color: #64748b; font-size: 13px; text-align: center;">
-                    If you didn't request this email, you can safely ignore it.
+                  <p style="margin: 0; color: #7e898d; font-size: 13px; text-align: center;">
+                    If you did not request this email, you can ignore it.
                   </p>
-                  <p style="margin: 20px 0 0 0; color: #475569; font-size: 12px; text-align: center;">
+                  <p style="margin: 18px 0 0 0; color: #64748b; font-size: 12px; text-align: center;">
                     ${emailCompanyFooter}
                   </p>
-                  <p style="margin: 8px 0 0 0; color: #475569; font-size: 12px; text-align: center;">
-                    \xA9 ${(/* @__PURE__ */ new Date()).getFullYear()} HOPSTECH INNOVATION. All rights reserved.
+                  <p style="margin: 8px 0 0 0; color: #64748b; font-size: 12px; text-align: center;">
+                    \xA9 ${(/* @__PURE__ */ new Date()).getFullYear()} ${COMPANY_NAME}. All rights reserved.
                   </p>
                 </td>
               </tr>
@@ -1405,18 +1619,18 @@ async function sendMagicLinkEmail(data) {
     </html>
   `;
   const textContent = `
-Hi ${data.name}!
+Hi ${data.name},
 
-Click the link below to sign in to your HOPSTECH INNOVATION client portal:
+Sign in to your ${COMPANY_NAME} client portal:
 
 ${data.magicLink}
 
-This link will expire in ${data.expiresInMinutes} minutes.
+This link expires in ${data.expiresInMinutes} minutes.
 
-If you didn't request this email, you can safely ignore it.
+If you did not request this email, you can ignore it.
 
 ---
-\xA9 ${(/* @__PURE__ */ new Date()).getFullYear()} HOPSTECH INNOVATION
+\xA9 ${(/* @__PURE__ */ new Date()).getFullYear()} ${COMPANY_NAME}
 ${emailCompanyFooter}
   `.trim();
   try {
@@ -1424,9 +1638,9 @@ ${emailCompanyFooter}
       console.log(`[Email] Attempting to send magic link via Resend to ${data.to}`);
     }
     const { data: emailData, error } = await resend.emails.send({
-      from: `HOPSTECH INNOVATION <${fromEmail}>`,
+      from: `${COMPANY_NAME} <${fromEmail}>`,
       to: [data.to],
-      subject: "\u{1F510} Sign in to HOPSTECH INNOVATION Client Portal",
+      subject: `Sign in to ${COMPANY_NAME} Client Portal`,
       text: textContent,
       html: htmlContent
     });
@@ -1453,7 +1667,7 @@ ${emailCompanyFooter}
 }
 async function sendContactEmail(data) {
   const resend = getResendClient();
-  const adminEmail = process.env.EMAIL_ADMIN || "hk@hopstecinnovation.com";
+  const adminEmail = process.env.EMAIL_ADMIN || "info@hopstecinnovation.com";
   const fromEmail = "noreply@hopstecinnovation.com";
   if (!resend) {
     console.error("[Email] Resend client not available for contact email");
@@ -1487,7 +1701,7 @@ async function sendContactEmail(data) {
           <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;">
 
           <p style="color: #666; font-size: 12px; margin: 0;">
-            This email was sent from the HOPSTECH INNOVATION contact form.
+            This email was sent from the ${COMPANY_NAME} contact form.
           </p>
         </div>
       </div>
@@ -1507,7 +1721,7 @@ Message:
 ${data.message}
 
 ---
-This email was sent from the HOPSTECH INNOVATION contact form.
+This email was sent from the ${COMPANY_NAME} contact form.
   `.trim();
   try {
     console.log("[Email] Attempting to send contact form email via Resend:", {
@@ -1517,7 +1731,7 @@ This email was sent from the HOPSTECH INNOVATION contact form.
       subject: `Contact Form: ${data.subject}`
     });
     const { data: emailData, error } = await resend.emails.send({
-      from: `HOPSTECH INNOVATION <${fromEmail}>`,
+      from: `${COMPANY_NAME} <${fromEmail}>`,
       to: [adminEmail],
       replyTo: data.email,
       subject: `Contact Form: ${data.subject}`,
@@ -1540,7 +1754,7 @@ This email was sent from the HOPSTECH INNOVATION contact form.
 }
 async function sendProjectInquiryEmail(data) {
   const resend = getResendClient();
-  const adminEmail = process.env.EMAIL_ADMIN || "hk@hopstecinnovation.com";
+  const adminEmail = process.env.EMAIL_ADMIN || "info@hopstecinnovation.com";
   const fromEmail = "noreply@hopstecinnovation.com";
   if (!resend) {
     console.error("[Email] Resend client not available for project inquiry email");
@@ -1580,7 +1794,7 @@ async function sendProjectInquiryEmail(data) {
           <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;">
 
           <p style="color: #666; font-size: 12px; margin: 0;">
-            This email was sent from the HOPSTECH INNOVATION client portal.
+            This email was sent from the ${COMPANY_NAME} client portal.
           </p>
         </div>
       </div>
@@ -1604,7 +1818,7 @@ Description:
 ${data.description}
 
 ---
-This email was sent from the HOPSTECH INNOVATION client portal.
+This email was sent from the ${COMPANY_NAME} client portal.
   `.trim();
   try {
     console.log("[Email] Attempting to send project inquiry email via Resend:", {
@@ -1614,7 +1828,7 @@ This email was sent from the HOPSTECH INNOVATION client portal.
       subject: `Project Inquiry: ${data.projectType} - ${data.name}`
     });
     const { data: emailData, error } = await resend.emails.send({
-      from: `HOPSTECH INNOVATION <${fromEmail}>`,
+      from: `${COMPANY_NAME} <${fromEmail}>`,
       to: [adminEmail],
       replyTo: data.email,
       subject: `Project Inquiry: ${data.projectType} - ${data.name}`,
@@ -1697,8 +1911,8 @@ var contactRouter = router({
 
 // server/clientPortalRouter.ts
 import { z as z6 } from "zod";
-import { eq as eq5, and as and3, desc as desc3, asc as asc2, sql, or as or2, count } from "drizzle-orm";
-import { TRPCError as TRPCError3 } from "@trpc/server";
+import { eq as eq5, and as and3, desc as desc3, asc as asc2, sql as sql2, or as or2, count } from "drizzle-orm";
+import { TRPCError as TRPCError4 } from "@trpc/server";
 var clientPortalRouter = router({
   /**
    * ========================================
@@ -1764,7 +1978,7 @@ var clientPortalRouter = router({
   // Get user profile
   getProfile: protectedProcedure.query(async ({ ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const profile = await db.select().from(userProfiles).where(eq5(userProfiles.userId, ctx.user.id)).limit(1);
     if (profile.length === 0) {
       const newProfile = await db.insert(userProfiles).values({
@@ -1796,7 +2010,7 @@ var clientPortalRouter = router({
     })
   ).mutation(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const updated = await db.update(userProfiles).set({
       ...input,
       updatedAt: /* @__PURE__ */ new Date()
@@ -1822,7 +2036,7 @@ var clientPortalRouter = router({
     })
   ).mutation(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const profile = await db.select().from(userProfiles).where(eq5(userProfiles.userId, ctx.user.id)).limit(1);
     const currentSettings = profile[0]?.notificationSettings || {};
     const newSettings = { ...currentSettings, ...input };
@@ -1840,21 +2054,21 @@ var clientPortalRouter = router({
   // Get dashboard stats
   getDashboardStats: protectedProcedure.query(async ({ ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const [projectStats] = await db.select({
       total: count(),
-      active: sql`count(*) filter (where ${clientProjectsExtended.status} = 'in_progress')`,
-      completed: sql`count(*) filter (where ${clientProjectsExtended.status} = 'completed')`
+      active: sql2`count(*) filter (where ${clientProjectsExtended.status} = 'in_progress')`,
+      completed: sql2`count(*) filter (where ${clientProjectsExtended.status} = 'completed')`
     }).from(clientProjectsExtended).where(eq5(clientProjectsExtended.userId, ctx.user.id));
     const [messageStats] = await db.select({
-      unread: sql`count(*) filter (where ${messages.read} = false)`
+      unread: sql2`count(*) filter (where ${messages.read} = false)`
     }).from(messages).where(eq5(messages.recipientId, ctx.user.id));
     const [ticketStats] = await db.select({
-      open: sql`count(*) filter (where ${supportTickets.status} in ('open', 'in_progress'))`
+      open: sql2`count(*) filter (where ${supportTickets.status} in ('open', 'in_progress'))`
     }).from(supportTickets).where(eq5(supportTickets.userId, ctx.user.id));
     const [invoiceStats] = await db.select({
-      pending: sql`count(*) filter (where ${invoices.status} = 'pending')`,
-      overdue: sql`count(*) filter (where ${invoices.status} = 'overdue')`
+      pending: sql2`count(*) filter (where ${invoices.status} = 'pending')`,
+      overdue: sql2`count(*) filter (where ${invoices.status} = 'overdue')`
     }).from(invoices).where(eq5(invoices.userId, ctx.user.id));
     return {
       projects: {
@@ -1883,7 +2097,7 @@ var clientPortalRouter = router({
     })
   ).query(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const conditions = [eq5(clientProjectsExtended.userId, ctx.user.id)];
     if (input.status) {
       conditions.push(eq5(clientProjectsExtended.status, input.status));
@@ -1899,7 +2113,7 @@ var clientPortalRouter = router({
   // Get single project by ID
   getProject: protectedProcedure.input(z6.object({ id: z6.number() })).query(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const [project] = await db.select().from(clientProjectsExtended).where(
       and3(
         eq5(clientProjectsExtended.id, input.id),
@@ -1907,18 +2121,25 @@ var clientPortalRouter = router({
       )
     ).limit(1);
     if (!project) {
-      throw new TRPCError3({ code: "NOT_FOUND", message: "Project not found" });
+      throw new TRPCError4({ code: "NOT_FOUND", message: "Project not found" });
     }
     const files = await db.select().from(projectFiles).where(eq5(projectFiles.projectId, input.id)).orderBy(desc3(projectFiles.createdAt));
+    const {
+      serviceLine: _serviceLine,
+      department: _department,
+      leadAssigneeId: _leadAssigneeId,
+      internalNotes: _internalNotes,
+      ...safeProject
+    } = project;
     return {
-      ...project,
+      ...safeProject,
       files
     };
   }),
   // Get project types
   getProjectTypes: publicProcedure.query(async () => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const types = await db.select().from(projectTypes).where(eq5(projectTypes.active, true)).orderBy(asc2(projectTypes.order), asc2(projectTypes.name));
     return types;
   }),
@@ -1936,7 +2157,7 @@ var clientPortalRouter = router({
     })
   ).mutation(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const [project] = await db.insert(clientProjectsExtended).values({
       userId: ctx.user.id,
       title: input.title,
@@ -1980,7 +2201,7 @@ var clientPortalRouter = router({
     })
   ).mutation(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const [project] = await db.select().from(clientProjectsExtended).where(
       and3(
         eq5(clientProjectsExtended.id, input.projectId),
@@ -1988,7 +2209,7 @@ var clientPortalRouter = router({
       )
     ).limit(1);
     if (!project) {
-      throw new TRPCError3({ code: "NOT_FOUND", message: "Project not found" });
+      throw new TRPCError4({ code: "NOT_FOUND", message: "Project not found" });
     }
     const [updatedProject] = await db.update(clientProjectsExtended).set({ milestones: input.milestones }).where(eq5(clientProjectsExtended.id, input.projectId)).returning();
     await db.insert(activityLog).values({
@@ -2009,7 +2230,7 @@ var clientPortalRouter = router({
     })
   ).mutation(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const [project] = await db.select().from(clientProjectsExtended).where(
       and3(
         eq5(clientProjectsExtended.id, input.projectId),
@@ -2017,7 +2238,7 @@ var clientPortalRouter = router({
       )
     ).limit(1);
     if (!project) {
-      throw new TRPCError3({ code: "NOT_FOUND", message: "Project not found" });
+      throw new TRPCError4({ code: "NOT_FOUND", message: "Project not found" });
     }
     const milestones = project.milestones || [];
     const updatedMilestones = milestones.map((m) => {
@@ -2057,7 +2278,7 @@ var clientPortalRouter = router({
     })
   ).query(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const conditions = [eq5(invoices.userId, ctx.user.id)];
     if (input.status) {
       conditions.push(eq5(invoices.status, input.status));
@@ -2073,7 +2294,7 @@ var clientPortalRouter = router({
   // Get single invoice
   getInvoice: protectedProcedure.input(z6.object({ id: z6.number() })).query(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const [invoice] = await db.select().from(invoices).where(
       and3(
         eq5(invoices.id, input.id),
@@ -2081,7 +2302,7 @@ var clientPortalRouter = router({
       )
     ).limit(1);
     if (!invoice) {
-      throw new TRPCError3({ code: "NOT_FOUND", message: "Invoice not found" });
+      throw new TRPCError4({ code: "NOT_FOUND", message: "Invoice not found" });
     }
     return invoice;
   }),
@@ -2099,7 +2320,7 @@ var clientPortalRouter = router({
     })
   ).query(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const conditions = [eq5(supportTickets.userId, ctx.user.id)];
     if (input.status) {
       conditions.push(eq5(supportTickets.status, input.status));
@@ -2115,7 +2336,7 @@ var clientPortalRouter = router({
   // Get single ticket with messages
   getTicket: protectedProcedure.input(z6.object({ id: z6.number() })).query(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const [ticket] = await db.select().from(supportTickets).where(
       and3(
         eq5(supportTickets.id, input.id),
@@ -2123,7 +2344,7 @@ var clientPortalRouter = router({
       )
     ).limit(1);
     if (!ticket) {
-      throw new TRPCError3({ code: "NOT_FOUND", message: "Ticket not found" });
+      throw new TRPCError4({ code: "NOT_FOUND", message: "Ticket not found" });
     }
     const ticketMsgs = await db.select().from(ticketMessages).where(
       and3(
@@ -2147,7 +2368,7 @@ var clientPortalRouter = router({
     })
   ).mutation(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const ticketNumber = `TKT-${Date.now()}-${Math.random().toString(36).substring(7).toUpperCase()}`;
     const [ticket] = await db.insert(supportTickets).values({
       userId: ctx.user.id,
@@ -2178,7 +2399,7 @@ var clientPortalRouter = router({
     })
   ).mutation(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const [ticket] = await db.select().from(supportTickets).where(
       and3(
         eq5(supportTickets.id, input.ticketId),
@@ -2186,7 +2407,7 @@ var clientPortalRouter = router({
       )
     ).limit(1);
     if (!ticket) {
-      throw new TRPCError3({ code: "NOT_FOUND", message: "Ticket not found" });
+      throw new TRPCError4({ code: "NOT_FOUND", message: "Ticket not found" });
     }
     const [message] = await db.insert(ticketMessages).values({
       ticketId: input.ticketId,
@@ -2213,7 +2434,7 @@ var clientPortalRouter = router({
     })
   ).query(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const messageList = await db.select().from(messages).where(
       or2(
         eq5(messages.senderId, ctx.user.id),
@@ -2231,7 +2452,7 @@ var clientPortalRouter = router({
     })
   ).mutation(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const [message] = await db.insert(messages).values({
       senderId: ctx.user.id,
       recipientId: input.recipientId,
@@ -2254,7 +2475,7 @@ var clientPortalRouter = router({
   // Mark message as read
   markMessageRead: protectedProcedure.input(z6.object({ id: z6.number() })).mutation(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     await db.update(messages).set({ read: true, readAt: /* @__PURE__ */ new Date() }).where(
       and3(
         eq5(messages.id, input.id),
@@ -2277,15 +2498,15 @@ var clientPortalRouter = router({
     })
   ).query(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const conditions = [eq5(notifications.userId, ctx.user.id)];
     if (input.unreadOnly) {
       conditions.push(eq5(notifications.read, false));
     }
     conditions.push(
       or2(
-        sql`${notifications.snoozedUntil} IS NULL`,
-        sql`${notifications.snoozedUntil} <= NOW()`
+        sql2`${notifications.snoozedUntil} IS NULL`,
+        sql2`${notifications.snoozedUntil} <= NOW()`
       )
     );
     const notificationList = await db.select().from(notifications).where(and3(...conditions)).orderBy(desc3(notifications.createdAt)).limit(input.limit).offset(input.offset);
@@ -2294,8 +2515,8 @@ var clientPortalRouter = router({
         eq5(notifications.userId, ctx.user.id),
         eq5(notifications.read, false),
         or2(
-          sql`${notifications.snoozedUntil} IS NULL`,
-          sql`${notifications.snoozedUntil} <= NOW()`
+          sql2`${notifications.snoozedUntil} IS NULL`,
+          sql2`${notifications.snoozedUntil} <= NOW()`
         )
       )
     );
@@ -2307,7 +2528,7 @@ var clientPortalRouter = router({
   // Mark notification as read
   markNotificationAsRead: protectedProcedure.input(z6.object({ notificationId: z6.number() })).mutation(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     await db.update(notifications).set({ read: true, readAt: /* @__PURE__ */ new Date() }).where(
       and3(
         eq5(notifications.id, input.notificationId),
@@ -2319,7 +2540,7 @@ var clientPortalRouter = router({
   // Mark all notifications as read
   markAllNotificationsAsRead: protectedProcedure.mutation(async ({ ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     await db.update(notifications).set({ read: true, readAt: /* @__PURE__ */ new Date() }).where(
       and3(
         eq5(notifications.userId, ctx.user.id),
@@ -2331,7 +2552,7 @@ var clientPortalRouter = router({
   // Delete notification
   deleteNotification: protectedProcedure.input(z6.object({ notificationId: z6.number() })).mutation(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     await db.delete(notifications).where(
       and3(
         eq5(notifications.id, input.notificationId),
@@ -2348,7 +2569,7 @@ var clientPortalRouter = router({
     })
   ).mutation(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     await db.update(notifications).set({ snoozedUntil: input.snoozeUntil }).where(
       and3(
         eq5(notifications.id, input.notificationId),
@@ -2370,7 +2591,7 @@ var clientPortalRouter = router({
     })
   ).query(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const activities = await db.select().from(activityLog).where(eq5(activityLog.userId, ctx.user.id)).orderBy(desc3(activityLog.createdAt)).limit(input.limit).offset(input.offset);
     return activities;
   }),
@@ -2382,7 +2603,7 @@ var clientPortalRouter = router({
   // Get project phases
   getProjectPhases: protectedProcedure.input(z6.object({ projectId: z6.number() })).query(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const project = await db.select().from(clientProjectsExtended).where(
       and3(
         eq5(clientProjectsExtended.id, input.projectId),
@@ -2390,7 +2611,7 @@ var clientPortalRouter = router({
       )
     ).limit(1);
     if (!project.length) {
-      throw new TRPCError3({ code: "NOT_FOUND", message: "Project not found" });
+      throw new TRPCError4({ code: "NOT_FOUND", message: "Project not found" });
     }
     const phases = await db.select().from(projectPhases).where(eq5(projectPhases.projectId, input.projectId)).orderBy(asc2(projectPhases.orderIndex));
     return phases;
@@ -2408,7 +2629,7 @@ var clientPortalRouter = router({
     })
   ).mutation(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const [phase] = await db.insert(projectPhases).values({
       projectId: input.projectId,
       name: input.name,
@@ -2438,7 +2659,7 @@ var clientPortalRouter = router({
     })
   ).mutation(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const updateData = { progress: input.progress, updatedAt: /* @__PURE__ */ new Date() };
     if (input.status) {
       updateData.status = input.status;
@@ -2476,7 +2697,7 @@ var clientPortalRouter = router({
     })
   ).query(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const conditions = [eq5(changeRequests.projectId, input.projectId)];
     if (input.status) {
       conditions.push(eq5(changeRequests.status, input.status));
@@ -2502,7 +2723,7 @@ var clientPortalRouter = router({
     })
   ).mutation(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const project = await db.select().from(clientProjectsExtended).where(
       and3(
         eq5(clientProjectsExtended.id, input.projectId),
@@ -2510,7 +2731,7 @@ var clientPortalRouter = router({
       )
     ).limit(1);
     if (!project.length) {
-      throw new TRPCError3({ code: "NOT_FOUND", message: "Project not found" });
+      throw new TRPCError4({ code: "NOT_FOUND", message: "Project not found" });
     }
     const [request] = await db.insert(changeRequests).values({
       projectId: input.projectId,
@@ -2553,7 +2774,7 @@ var clientPortalRouter = router({
     })
   ).mutation(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const [request] = await db.update(changeRequests).set({
       status: input.status,
       adminNotes: input.adminNotes || null,
@@ -2587,7 +2808,7 @@ var clientPortalRouter = router({
     })
   ).mutation(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const [project] = await db.select().from(clientProjectsExtended).where(
       and3(
         eq5(clientProjectsExtended.id, input.projectId),
@@ -2595,7 +2816,7 @@ var clientPortalRouter = router({
       )
     ).limit(1);
     if (!project) {
-      throw new TRPCError3({ code: "NOT_FOUND", message: "Project not found" });
+      throw new TRPCError4({ code: "NOT_FOUND", message: "Project not found" });
     }
     let toStatus = project.status;
     if (input.requestType === "pause") toStatus = "on_hold";
@@ -2633,7 +2854,7 @@ var clientPortalRouter = router({
     })
   ).query(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const conditions = [eq5(projectStatusChanges.projectId, input.projectId)];
     if (input.status) {
       conditions.push(eq5(projectStatusChanges.status, input.status));
@@ -2650,7 +2871,7 @@ var clientPortalRouter = router({
     })
   ).mutation(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const [request] = await db.update(projectStatusChanges).set({
       status: input.approved ? "approved" : "rejected",
       approvedBy: ctx.user.id,
@@ -2680,7 +2901,7 @@ var clientPortalRouter = router({
   // Get payment plan for project
   getPaymentPlan: protectedProcedure.input(z6.object({ projectId: z6.number() })).query(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const project = await db.select().from(clientProjectsExtended).where(
       and3(
         eq5(clientProjectsExtended.id, input.projectId),
@@ -2688,7 +2909,7 @@ var clientPortalRouter = router({
       )
     ).limit(1);
     if (!project.length) {
-      throw new TRPCError3({ code: "NOT_FOUND", message: "Project not found" });
+      throw new TRPCError4({ code: "NOT_FOUND", message: "Project not found" });
     }
     const [plan] = await db.select().from(paymentPlans).where(eq5(paymentPlans.projectId, input.projectId)).limit(1);
     if (!plan) {
@@ -2716,7 +2937,7 @@ var clientPortalRouter = router({
     })
   ).mutation(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const [plan] = await db.insert(paymentPlans).values({
       projectId: input.projectId,
       totalAmount: input.totalAmount,
@@ -2748,7 +2969,7 @@ var clientPortalRouter = router({
     })
   ).mutation(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const [installment] = await db.update(paymentInstallments).set({
       status: "paid",
       paidAt: /* @__PURE__ */ new Date(),
@@ -2789,7 +3010,7 @@ var clientPortalRouter = router({
     })
   ).mutation(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const [project] = await db.update(clientProjectsExtended).set({
       progress: input.progress,
       lastProgressUpdate: /* @__PURE__ */ new Date(),
@@ -2808,10 +3029,10 @@ var clientPortalRouter = router({
   // Recalculate project progress based on milestones/phases
   recalculateProgress: protectedProcedure.input(z6.object({ projectId: z6.number() })).mutation(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const [project] = await db.select().from(clientProjectsExtended).where(eq5(clientProjectsExtended.id, input.projectId)).limit(1);
     if (!project) {
-      throw new TRPCError3({ code: "NOT_FOUND", message: "Project not found" });
+      throw new TRPCError4({ code: "NOT_FOUND", message: "Project not found" });
     }
     let calculatedProgress = 0;
     if (project.progressCalculationMethod === "milestone") {
@@ -2872,7 +3093,7 @@ var clientPortalRouter = router({
   // Get progress breakdown
   getProgressBreakdown: protectedProcedure.input(z6.object({ projectId: z6.number() })).query(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const [project] = await db.select().from(clientProjectsExtended).where(
       and3(
         eq5(clientProjectsExtended.id, input.projectId),
@@ -2880,7 +3101,7 @@ var clientPortalRouter = router({
       )
     ).limit(1);
     if (!project) {
-      throw new TRPCError3({ code: "NOT_FOUND", message: "Project not found" });
+      throw new TRPCError4({ code: "NOT_FOUND", message: "Project not found" });
     }
     const phases = await db.select().from(projectPhases).where(eq5(projectPhases.projectId, input.projectId)).orderBy(asc2(projectPhases.orderIndex));
     const milestones = project.milestones || [];
@@ -2921,25 +3142,81 @@ var clientPortalRouter = router({
 
 // server/magicLinkRouter.ts
 import { z as z7 } from "zod";
+import { TRPCError as TRPCError5 } from "@trpc/server";
 import { nanoid } from "nanoid";
 var MAGIC_LINK_EXPIRY_MINUTES = 15;
+var STAFF_GENERIC_OK = "If this account is authorised, a sign-in link has been sent.";
+var STAFF_GENERIC_FAIL = "Sign-in is not available for this account.";
+var sessionUser = (user) => ({
+  id: user.id,
+  email: user.email,
+  name: user.name,
+  role: user.role,
+  jobTitle: user.jobTitle ?? null,
+  dashboardPath: dashboardPathForRole(user.role)
+});
+function allowedStaffEmailDomains() {
+  const raw = process.env.STAFF_EMAIL_DOMAINS?.trim();
+  if (!raw) return [];
+  return raw.split(",").map((d) => d.trim().toLowerCase()).filter(Boolean);
+}
+function emailAllowedForStaff(email) {
+  const domains = allowedStaffEmailDomains();
+  if (domains.length === 0) return true;
+  const host = email.split("@")[1]?.toLowerCase();
+  return !!host && domains.includes(host);
+}
+function canRequestStaffMagicLink(user, email) {
+  if (!user || !isInternalRole(user.role)) return false;
+  if (user.role === "admin") return true;
+  return emailAllowedForStaff(email);
+}
+function resolveOrigin(ctx) {
+  if (process.env.APP_URL) {
+    return process.env.APP_URL.replace(/\/$/, "");
+  }
+  if (typeof ctx.req?.headers?.origin === "string" && ctx.req.headers.origin) {
+    return ctx.req.headers.origin.replace(/\/$/, "");
+  }
+  if (typeof ctx.req?.headers?.referer === "string" && ctx.req.headers.referer) {
+    try {
+      return new URL(ctx.req.headers.referer).origin;
+    } catch {
+    }
+  }
+  return "https://hopstecinnovation.com";
+}
 var magicLinkRouter = router({
-  // Request a magic link
   requestMagicLink: publicProcedure.input(
     z7.object({
       email: z7.string().email("Invalid email address"),
-      name: z7.string().min(2, "Name must be at least 2 characters").optional()
+      name: z7.string().min(2, "Name must be at least 2 characters").optional(),
+      /** client = public portal; team = staff console (provisioned only). */
+      portal: z7.enum(PORTAL_AUDIENCES).default("client")
     })
   ).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) {
       throw new Error("Database not available");
     }
-    const { email, name } = input;
+    const email = input.email.trim().toLowerCase();
+    const { name, portal } = input;
+    if (portal === "team") {
+      const existing = await getUserByEmail(email);
+      const authorised = canRequestStaffMagicLink(existing, email);
+      if (!authorised) {
+        console.warn("[MagicLink] Staff sign-in denied (no leak to client)", {
+          emailHost: email.split("@")[1]
+        });
+        return { success: true, message: STAFF_GENERIC_OK };
+      }
+    }
     const ip = ctx.req?.headers?.["x-forwarded-for"] || ctx.req?.headers?.["x-real-ip"] || "unknown";
     const userAgent = ctx.req?.headers?.["user-agent"] || "unknown";
     const token = nanoid(32);
-    const expiresAt = new Date(Date.now() + MAGIC_LINK_EXPIRY_MINUTES * 60 * 1e3);
+    const expiresAt = new Date(
+      Date.now() + MAGIC_LINK_EXPIRY_MINUTES * 60 * 1e3
+    );
     await createMagicLink({
       email,
       token,
@@ -2948,14 +3225,8 @@ var magicLinkRouter = router({
       ip,
       userAgent
     });
-    const origin = ctx.req?.headers?.origin || ctx.req?.headers?.referer?.replace(/\/$/, "") || process.env.APP_URL || "https://hopstecinnovation.com";
-    const magicLinkUrl = `${origin}/auth/verify?token=${token}`;
-    console.log("[MagicLink] Generated magic link:", {
-      origin,
-      hasOriginHeader: !!ctx.req?.headers?.origin,
-      hasRefererHeader: !!ctx.req?.headers?.referer,
-      usedAppUrl: !ctx.req?.headers?.origin && !ctx.req?.headers?.referer
-    });
+    const origin = resolveOrigin(ctx);
+    const magicLinkUrl = `${origin}/auth/verify?token=${token}&portal=${portal}`;
     try {
       await sendMagicLinkEmail({
         to: email,
@@ -2965,85 +3236,112 @@ var magicLinkRouter = router({
       });
       return {
         success: true,
-        message: "Magic link sent! Check your email to sign in."
+        message: portal === "team" ? STAFF_GENERIC_OK : "Magic link sent! Check your email to sign in."
       };
     } catch (error) {
       console.error("[MagicLink] Failed to send email:", error);
+      if (portal === "team") {
+        return { success: true, message: STAFF_GENERIC_OK };
+      }
       const errorMessage = error instanceof Error ? error.message : String(error);
       throw new Error(`Failed to send magic link email: ${errorMessage}`);
     }
   }),
-  // Verify magic link token
   verifyMagicLink: publicProcedure.input(
     z7.object({
-      token: z7.string().min(1, "Token is required")
+      token: z7.string().min(1, "Token is required"),
+      portal: z7.enum(PORTAL_AUDIENCES).optional()
     })
   ).mutation(async ({ input, ctx }) => {
-    const { token } = input;
-    const magicLink = await getMagicLinkByToken(token);
-    if (!magicLink) {
-      throw new Error("Invalid or expired magic link");
-    }
-    if (magicLink.status === "used") {
-      throw new Error("This magic link has already been used");
-    }
-    if (/* @__PURE__ */ new Date() > magicLink.expiresAt) {
-      throw new Error("This magic link has expired");
-    }
-    await markMagicLinkAsUsed(token);
-    let user = await getUserByEmail(magicLink.email);
-    if (!user) {
-      const openId = `magic_${nanoid(16)}`;
-      await upsertUser({
-        openId,
-        email: magicLink.email,
-        name: magicLink.email.split("@")[0],
-        loginMethod: "magic-link",
-        role: "client",
-        lastSignedIn: /* @__PURE__ */ new Date()
+    try {
+      const { token, portal } = input;
+      const magicLink = await getMagicLinkByToken(token);
+      if (!magicLink) {
+        throw new TRPCError5({
+          code: "BAD_REQUEST",
+          message: "Invalid or expired magic link"
+        });
+      }
+      if (magicLink.status === "used") {
+        throw new TRPCError5({
+          code: "BAD_REQUEST",
+          message: "This magic link has already been used"
+        });
+      }
+      if (/* @__PURE__ */ new Date() > magicLink.expiresAt) {
+        throw new TRPCError5({
+          code: "BAD_REQUEST",
+          message: "This magic link has expired"
+        });
+      }
+      await markMagicLinkAsUsed(token);
+      let user = await getUserByEmail(magicLink.email);
+      if (!user) {
+        if (portal === "team") {
+          throw new TRPCError5({
+            code: "FORBIDDEN",
+            message: STAFF_GENERIC_FAIL
+          });
+        }
+        const openId = `magic_${nanoid(16)}`;
+        await upsertUser({
+          openId,
+          email: magicLink.email,
+          name: magicLink.email.split("@")[0],
+          loginMethod: "magic-link",
+          role: "client",
+          lastSignedIn: /* @__PURE__ */ new Date()
+        });
+        user = await getUserByEmail(magicLink.email);
+      } else {
+        if (portal === "team") {
+          if (!canRequestStaffMagicLink(user, magicLink.email)) {
+            throw new TRPCError5({
+              code: "FORBIDDEN",
+              message: STAFF_GENERIC_FAIL
+            });
+          }
+        }
+        await upsertUser({
+          openId: user.openId,
+          lastSignedIn: /* @__PURE__ */ new Date()
+        });
+      }
+      if (!user) {
+        throw new TRPCError5({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "We could not complete sign-in. Please request a new link."
+        });
+      }
+      if (portal === "team" && !isInternalRole(user.role)) {
+        throw new TRPCError5({
+          code: "FORBIDDEN",
+          message: STAFF_GENERIC_FAIL
+        });
+      }
+      const sessionToken = await sdk.createSessionToken(user.openId, {
+        name: user.name || user.email || ""
       });
-      user = await getUserByEmail(magicLink.email);
-    } else {
-      await upsertUser({
-        openId: user.openId,
-        lastSignedIn: /* @__PURE__ */ new Date()
-      });
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.cookie(COOKIE_NAME, sessionToken, cookieOptions);
+      return {
+        success: true,
+        user: sessionUser(user),
+        message: "Successfully authenticated!"
+      };
+    } catch (error) {
+      toPublicTrpcError(error, "auth");
     }
-    if (!user) {
-      throw new Error("Failed to create or retrieve user");
-    }
-    const sessionToken = await sdk.createSessionToken(user.openId, {
-      name: user.name || user.email || ""
-    });
-    const cookieOptions = getSessionCookieOptions(ctx.req);
-    ctx.res.cookie(COOKIE_NAME, sessionToken, cookieOptions);
-    return {
-      success: true,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role
-      },
-      message: "Successfully authenticated!"
-    };
   }),
-  // Get current session
   getCurrentSession: publicProcedure.query(async ({ ctx }) => {
     if (!ctx.user) {
       return { authenticated: false, user: null };
     }
     return {
       authenticated: true,
-      user: {
-        id: ctx.user.id,
-        email: ctx.user.email,
-        name: ctx.user.name,
-        role: ctx.user.role
-      }
+      user: sessionUser(ctx.user)
     };
   }),
-  // Logout
   logout: publicProcedure.mutation(async ({ ctx }) => {
     const cookieOptions = getSessionCookieOptions(ctx.req);
     ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
@@ -3110,6 +3408,1200 @@ var testEmailRouter = router({
   })
 });
 
+// server/liveRunRouter.ts
+import { z as z8 } from "zod";
+import { TRPCError as TRPCError6 } from "@trpc/server";
+import { and as and5, asc as asc4, desc as desc5, eq as eq7, or as or4 } from "drizzle-orm";
+
+// server/liveRunHelpers.ts
+import { and as and4, asc as asc3, desc as desc4, eq as eq6, inArray, or as or3 } from "drizzle-orm";
+var DEFAULT_LIVE_STEPS = [
+  { label: "Discover", description: "Scope, goals, and success criteria" },
+  { label: "Architect", description: "System design and technical plan" },
+  { label: "Build", description: "Implementation in progress" },
+  { label: "Review", description: "QA, feedback, and iteration" },
+  { label: "Deploy", description: "Staging / production release" },
+  { label: "Handover", description: "Docs, training, and ownership transfer" }
+];
+function toClientLiveRun(bundle) {
+  if (!bundle) return null;
+  const { notes, createdBy, ...run } = bundle.run;
+  const steps = bundle.steps.map(({ skippedReason, ...step }) => step);
+  return { ...bundle, run, steps, currentStep: steps.find((step) => step.id === bundle.currentStep?.id) || null };
+}
+function shapeRun(run, steps, projectTitle) {
+  const ordered = [...steps].sort((a, b) => a.orderIndex - b.orderIndex);
+  const currentStep = ordered.find((s) => s.id === run.currentStepId) || ordered.find((s) => s.status === "active") || null;
+  const completedSteps = ordered.filter(
+    (s) => s.status === "done" || s.status === "skipped"
+  ).length;
+  const totalSteps = ordered.length;
+  const percentComplete = totalSteps === 0 ? 0 : Math.round(completedSteps / totalSteps * 100);
+  const lastUpdatedAt = ordered.reduce((latest, step) => {
+    const t2 = step.updatedAt?.getTime?.() ?? 0;
+    return t2 > latest.getTime() ? step.updatedAt : latest;
+  }, run.updatedAt);
+  return {
+    run,
+    steps: ordered,
+    currentStep,
+    completedSteps,
+    totalSteps,
+    percentComplete,
+    projectTitle,
+    projectId: run.projectId,
+    lastUpdatedAt
+  };
+}
+async function getLiveRunBundle(runId) {
+  const db = await getDb();
+  if (!db) return null;
+  const [run] = await db.select().from(projectLiveRuns).where(eq6(projectLiveRuns.id, runId)).limit(1);
+  if (!run) return null;
+  const [project] = await db.select({ title: clientProjectsExtended.title }).from(clientProjectsExtended).where(eq6(clientProjectsExtended.id, run.projectId)).limit(1);
+  const steps = await db.select().from(projectLiveSteps).where(eq6(projectLiveSteps.runId, run.id)).orderBy(asc3(projectLiveSteps.orderIndex));
+  return shapeRun(run, steps, project?.title || "Project");
+}
+async function getActiveLiveRunForProject(projectId) {
+  const db = await getDb();
+  if (!db) return null;
+  const [run] = await db.select().from(projectLiveRuns).where(
+    and4(
+      eq6(projectLiveRuns.projectId, projectId),
+      or3(
+        eq6(projectLiveRuns.status, "active"),
+        eq6(projectLiveRuns.status, "paused")
+      )
+    )
+  ).orderBy(desc4(projectLiveRuns.createdAt)).limit(1);
+  if (!run) return null;
+  return getLiveRunBundle(run.id);
+}
+async function getLiveRunsForUserProjects(userId) {
+  const db = await getDb();
+  if (!db) return [];
+  const projects2 = await db.select({
+    id: clientProjectsExtended.id,
+    title: clientProjectsExtended.title
+  }).from(clientProjectsExtended).where(eq6(clientProjectsExtended.userId, userId));
+  if (projects2.length === 0) return [];
+  const projectIds = projects2.map((p) => p.id);
+  const titleById = new Map(projects2.map((p) => [p.id, p.title]));
+  const runs = await db.select().from(projectLiveRuns).where(
+    and4(
+      inArray(projectLiveRuns.projectId, projectIds),
+      or3(
+        eq6(projectLiveRuns.status, "active"),
+        eq6(projectLiveRuns.status, "paused")
+      )
+    )
+  ).orderBy(desc4(projectLiveRuns.updatedAt));
+  if (runs.length === 0) return [];
+  const runIds = runs.map((r) => r.id);
+  const steps = await db.select().from(projectLiveSteps).where(inArray(projectLiveSteps.runId, runIds)).orderBy(asc3(projectLiveSteps.orderIndex));
+  const stepsByRun = /* @__PURE__ */ new Map();
+  for (const step of steps) {
+    const list = stepsByRun.get(step.runId) || [];
+    list.push(step);
+    stepsByRun.set(step.runId, list);
+  }
+  return runs.map(
+    (run) => shapeRun(
+      run,
+      stepsByRun.get(run.id) || [],
+      titleById.get(run.projectId) || "Project"
+    )
+  );
+}
+async function logLiveActivity(params) {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(activityLog).values({
+    userId: params.userId,
+    action: params.action,
+    entity: "live_run",
+    entityId: params.entityId,
+    description: params.description,
+    metadata: params.metadata || null
+  });
+}
+function buildStepInserts(runId, steps) {
+  return steps.map((step, index2) => ({
+    runId,
+    label: step.label,
+    description: step.description || null,
+    orderIndex: index2,
+    status: index2 === 0 ? "active" : "pending",
+    startedAt: index2 === 0 ? /* @__PURE__ */ new Date() : null
+  }));
+}
+
+// server/liveRunRouter.ts
+async function requireDb() {
+  const db = await getDb();
+  if (!db) {
+    throw new TRPCError6({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Database not available"
+    });
+  }
+  return db;
+}
+async function assertProjectOwnedByUser(projectId, userId) {
+  const db = await requireDb();
+  const [project] = await db.select().from(clientProjectsExtended).where(
+    and5(
+      eq7(clientProjectsExtended.id, projectId),
+      eq7(clientProjectsExtended.userId, userId)
+    )
+  ).limit(1);
+  if (!project) {
+    throw new TRPCError6({ code: "NOT_FOUND", message: "Project not found" });
+  }
+  return project;
+}
+var liveRunRouter = router({
+  /** Client: active/paused runs across owned projects (dashboard Live Now) */
+  getMyLiveRuns: protectedProcedure.query(async ({ ctx }) => {
+    return (await getLiveRunsForUserProjects(ctx.user.id)).map((bundle) => toClientLiveRun(bundle));
+  }),
+  /** Client: active/paused run for one owned project */
+  getActiveLiveRun: protectedProcedure.input(z8.object({ projectId: z8.number() })).query(async ({ ctx, input }) => {
+    const project = await assertProjectOwnedByUser(input.projectId, ctx.user.id);
+    if (!project.commitDate || !project.poReceivedAt) return null;
+    const active = await getActiveLiveRunForProject(input.projectId);
+    if (active) return toClientLiveRun(active);
+    const db = await requireDb();
+    const [latest] = await db.select().from(projectLiveRuns).where(and5(
+      eq7(projectLiveRuns.projectId, input.projectId),
+      eq7(projectLiveRuns.status, "completed")
+    )).orderBy(desc5(projectLiveRuns.createdAt)).limit(1);
+    return latest ? toClientLiveRun(await getLiveRunBundle(latest.id)) : null;
+  }),
+  /** Admin: list all client projects with optional active run summary */
+  listProjects: staffProcedure.query(async () => {
+    const db = await requireDb();
+    const projects2 = await db.select({
+      id: clientProjectsExtended.id,
+      title: clientProjectsExtended.title,
+      status: clientProjectsExtended.status,
+      progress: clientProjectsExtended.progress,
+      userId: clientProjectsExtended.userId,
+      clientName: users.name,
+      clientEmail: users.email,
+      updatedAt: clientProjectsExtended.updatedAt
+    }).from(clientProjectsExtended).leftJoin(users, eq7(users.id, clientProjectsExtended.userId)).orderBy(desc5(clientProjectsExtended.updatedAt));
+    const activeRuns = await db.select().from(projectLiveRuns).where(
+      or4(
+        eq7(projectLiveRuns.status, "active"),
+        eq7(projectLiveRuns.status, "paused")
+      )
+    );
+    const runByProject = new Map(activeRuns.map((r) => [r.projectId, r]));
+    return projects2.map((project) => ({
+      ...project,
+      activeRun: runByProject.get(project.id) || null
+    }));
+  }),
+  /** Admin: full run bundle for a project (active or latest) */
+  getProjectLiveRun: staffProcedure.input(z8.object({ projectId: z8.number() })).query(async ({ input }) => {
+    const db = await requireDb();
+    const [project] = await db.select().from(clientProjectsExtended).where(eq7(clientProjectsExtended.id, input.projectId)).limit(1);
+    if (!project) {
+      throw new TRPCError6({ code: "NOT_FOUND", message: "Project not found" });
+    }
+    const active = await getActiveLiveRunForProject(input.projectId);
+    if (active) return { project, live: active };
+    const [latest] = await db.select().from(projectLiveRuns).where(eq7(projectLiveRuns.projectId, input.projectId)).orderBy(desc5(projectLiveRuns.createdAt)).limit(1);
+    if (!latest) return { project, live: null };
+    const bundle = await getLiveRunBundle(latest.id);
+    return { project, live: bundle };
+  }),
+  startLiveRun: staffProcedure.input(
+    z8.object({
+      projectId: z8.number(),
+      title: z8.string().min(2).max(255).optional(),
+      notes: z8.string().optional(),
+      steps: z8.array(
+        z8.object({
+          label: z8.string().min(1),
+          description: z8.string().optional()
+        })
+      ).min(1).optional()
+    })
+  ).mutation(async ({ ctx, input }) => {
+    const db = await requireDb();
+    const [project] = await db.select().from(clientProjectsExtended).where(eq7(clientProjectsExtended.id, input.projectId)).limit(1);
+    if (!project) {
+      throw new TRPCError6({ code: "NOT_FOUND", message: "Project not found" });
+    }
+    const committed = !!project.commitDate && (project.commercialStage === "committed" || project.commercialStage === "in_delivery");
+    if (!committed || !project.poReceivedAt) {
+      throw new TRPCError6({
+        code: "PRECONDITION_FAILED",
+        message: "Live run can start only after approved PO reception and commit date."
+      });
+    }
+    const existing = await getActiveLiveRunForProject(input.projectId);
+    if (existing) {
+      throw new TRPCError6({
+        code: "CONFLICT",
+        message: "Project already has an active or paused live run"
+      });
+    }
+    const stepDefs = input.steps && input.steps.length > 0 ? input.steps : DEFAULT_LIVE_STEPS.map((s) => ({
+      label: s.label,
+      description: s.description
+    }));
+    const [run] = await db.insert(projectLiveRuns).values({
+      projectId: input.projectId,
+      title: input.title || `${project.title} \u2014 live run`,
+      status: "active",
+      notes: input.notes || null,
+      createdBy: ctx.user.id
+    }).returning();
+    const inserts = buildStepInserts(run.id, stepDefs);
+    const createdSteps = await db.insert(projectLiveSteps).values(inserts).returning();
+    const first = createdSteps.sort((a, b) => a.orderIndex - b.orderIndex)[0];
+    if (first) {
+      await db.update(projectLiveRuns).set({ currentStepId: first.id, updatedAt: /* @__PURE__ */ new Date() }).where(eq7(projectLiveRuns.id, run.id));
+    }
+    await logLiveActivity({
+      userId: ctx.user.id,
+      action: "live_run_started",
+      entityId: run.id,
+      description: `Started live run on "${project.title}"`,
+      metadata: { projectId: project.id, stepCount: createdSteps.length }
+    });
+    await db.update(clientProjectsExtended).set({
+      commercialStage: "in_delivery",
+      updatedAt: /* @__PURE__ */ new Date()
+    }).where(eq7(clientProjectsExtended.id, project.id));
+    return getLiveRunBundle(run.id);
+  }),
+  setStepStatus: staffProcedure.input(
+    z8.object({
+      stepId: z8.number(),
+      status: z8.enum(["pending", "active", "done", "skipped"]),
+      skippedReason: z8.string().optional(),
+      activateNext: z8.boolean().default(true)
+    })
+  ).mutation(async ({ ctx, input }) => {
+    const db = await requireDb();
+    const [step] = await db.select().from(projectLiveSteps).where(eq7(projectLiveSteps.id, input.stepId)).limit(1);
+    if (!step) {
+      throw new TRPCError6({ code: "NOT_FOUND", message: "Step not found" });
+    }
+    const [run] = await db.select().from(projectLiveRuns).where(eq7(projectLiveRuns.id, step.runId)).limit(1);
+    if (!run || run.status !== "active" && run.status !== "paused") {
+      throw new TRPCError6({
+        code: "BAD_REQUEST",
+        message: "Live run is not active"
+      });
+    }
+    const now = /* @__PURE__ */ new Date();
+    const patch = {
+      status: input.status,
+      updatedAt: now
+    };
+    if (input.status === "active") {
+      patch.startedAt = step.startedAt || now;
+      patch.completedAt = null;
+      patch.skippedReason = null;
+    }
+    if (input.status === "done") {
+      patch.completedAt = now;
+      patch.startedAt = step.startedAt || now;
+      patch.skippedReason = null;
+    }
+    if (input.status === "skipped") {
+      patch.completedAt = now;
+      patch.skippedReason = input.skippedReason || null;
+    }
+    if (input.status === "pending") {
+      patch.startedAt = null;
+      patch.completedAt = null;
+      patch.skippedReason = null;
+    }
+    await db.update(projectLiveSteps).set(patch).where(eq7(projectLiveSteps.id, step.id));
+    let currentStepId = run.currentStepId;
+    if (input.status === "active") {
+      const siblings = await db.select().from(projectLiveSteps).where(eq7(projectLiveSteps.runId, run.id));
+      for (const sibling of siblings) {
+        if (sibling.id !== step.id && sibling.status === "active") {
+          await db.update(projectLiveSteps).set({ status: "pending", updatedAt: now }).where(eq7(projectLiveSteps.id, sibling.id));
+        }
+      }
+      currentStepId = step.id;
+    }
+    if (input.activateNext && (input.status === "done" || input.status === "skipped")) {
+      const steps = await db.select().from(projectLiveSteps).where(eq7(projectLiveSteps.runId, run.id)).orderBy(asc4(projectLiveSteps.orderIndex));
+      const next = steps.find(
+        (s) => s.orderIndex > step.orderIndex && (s.status === "pending" || s.id === step.id)
+      );
+      const nextPending = steps.find(
+        (s) => s.orderIndex > step.orderIndex && s.status === "pending"
+      );
+      if (nextPending) {
+        await db.update(projectLiveSteps).set({
+          status: "active",
+          startedAt: now,
+          updatedAt: now
+        }).where(eq7(projectLiveSteps.id, nextPending.id));
+        currentStepId = nextPending.id;
+      } else if (!next) {
+        currentStepId = step.id;
+      }
+    }
+    await db.update(projectLiveRuns).set({
+      currentStepId,
+      status: run.status === "paused" ? "active" : run.status,
+      updatedAt: now
+    }).where(eq7(projectLiveRuns.id, run.id));
+    await logLiveActivity({
+      userId: ctx.user.id,
+      action: "live_step_updated",
+      entityId: run.id,
+      description: `Marked step "${step.label}" as ${input.status}`,
+      metadata: { stepId: step.id, status: input.status }
+    });
+    return getLiveRunBundle(run.id);
+  }),
+  pauseLiveRun: staffProcedure.input(z8.object({ runId: z8.number() })).mutation(async ({ ctx, input }) => {
+    const db = await requireDb();
+    const [run] = await db.update(projectLiveRuns).set({ status: "paused", updatedAt: /* @__PURE__ */ new Date() }).where(eq7(projectLiveRuns.id, input.runId)).returning();
+    if (!run) {
+      throw new TRPCError6({ code: "NOT_FOUND", message: "Live run not found" });
+    }
+    await logLiveActivity({
+      userId: ctx.user.id,
+      action: "live_run_paused",
+      entityId: run.id,
+      description: `Paused live run "${run.title}"`
+    });
+    return getLiveRunBundle(run.id);
+  }),
+  resumeLiveRun: staffProcedure.input(z8.object({ runId: z8.number() })).mutation(async ({ ctx, input }) => {
+    const db = await requireDb();
+    const [run] = await db.update(projectLiveRuns).set({ status: "active", updatedAt: /* @__PURE__ */ new Date() }).where(eq7(projectLiveRuns.id, input.runId)).returning();
+    if (!run) {
+      throw new TRPCError6({ code: "NOT_FOUND", message: "Live run not found" });
+    }
+    await logLiveActivity({
+      userId: ctx.user.id,
+      action: "live_run_resumed",
+      entityId: run.id,
+      description: `Resumed live run "${run.title}"`
+    });
+    return getLiveRunBundle(run.id);
+  }),
+  completeLiveRun: staffProcedure.input(z8.object({ runId: z8.number() })).mutation(async ({ ctx, input }) => {
+    const db = await requireDb();
+    const steps = await db.select().from(projectLiveSteps).where(eq7(projectLiveSteps.runId, input.runId));
+    if (steps.some((step) => step.status === "pending" || step.status === "active")) {
+      throw new TRPCError6({ code: "PRECONDITION_FAILED", message: "Complete or explicitly skip each delivery step before closing the run." });
+    }
+    const now = /* @__PURE__ */ new Date();
+    const [run] = await db.update(projectLiveRuns).set({
+      status: "completed",
+      completedAt: now,
+      updatedAt: now
+    }).where(eq7(projectLiveRuns.id, input.runId)).returning();
+    if (!run) {
+      throw new TRPCError6({ code: "NOT_FOUND", message: "Live run not found" });
+    }
+    await db.update(clientProjectsExtended).set({ commercialStage: "closed", status: "completed", progress: 100, updatedAt: now }).where(eq7(clientProjectsExtended.id, run.projectId));
+    const openSteps = await db.select().from(projectLiveSteps).where(eq7(projectLiveSteps.runId, run.id));
+    for (const step of openSteps) {
+      if (step.status === "pending" || step.status === "active") {
+        await db.update(projectLiveSteps).set({
+          status: "skipped",
+          skippedReason: "Run completed",
+          completedAt: now,
+          updatedAt: now
+        }).where(eq7(projectLiveSteps.id, step.id));
+      }
+    }
+    await logLiveActivity({
+      userId: ctx.user.id,
+      action: "live_run_completed",
+      entityId: run.id,
+      description: `Completed live run "${run.title}"`
+    });
+    return getLiveRunBundle(run.id);
+  }),
+  cancelLiveRun: staffProcedure.input(z8.object({ runId: z8.number() })).mutation(async ({ ctx, input }) => {
+    const db = await requireDb();
+    const [run] = await db.update(projectLiveRuns).set({
+      status: "cancelled",
+      completedAt: /* @__PURE__ */ new Date(),
+      updatedAt: /* @__PURE__ */ new Date()
+    }).where(eq7(projectLiveRuns.id, input.runId)).returning();
+    if (!run) {
+      throw new TRPCError6({ code: "NOT_FOUND", message: "Live run not found" });
+    }
+    await logLiveActivity({
+      userId: ctx.user.id,
+      action: "live_run_cancelled",
+      entityId: run.id,
+      description: `Cancelled live run "${run.title}"`
+    });
+    return getLiveRunBundle(run.id);
+  }),
+  upsertLiveSteps: staffProcedure.input(
+    z8.object({
+      runId: z8.number(),
+      steps: z8.array(
+        z8.object({
+          id: z8.number().optional(),
+          label: z8.string().min(1),
+          description: z8.string().optional(),
+          orderIndex: z8.number().int().min(0)
+        })
+      ).min(1)
+    })
+  ).mutation(async ({ ctx, input }) => {
+    const db = await requireDb();
+    const [run] = await db.select().from(projectLiveRuns).where(eq7(projectLiveRuns.id, input.runId)).limit(1);
+    if (!run) {
+      throw new TRPCError6({ code: "NOT_FOUND", message: "Live run not found" });
+    }
+    if (run.status === "completed" || run.status === "cancelled") {
+      throw new TRPCError6({
+        code: "BAD_REQUEST",
+        message: "Cannot edit steps on a finished run"
+      });
+    }
+    const existing = await db.select().from(projectLiveSteps).where(eq7(projectLiveSteps.runId, run.id));
+    const existingIds = new Set(existing.map((s) => s.id));
+    const keepIds = new Set(
+      input.steps.filter((s) => s.id).map((s) => s.id)
+    );
+    for (const step of existing) {
+      if (!keepIds.has(step.id)) {
+        await db.delete(projectLiveSteps).where(eq7(projectLiveSteps.id, step.id));
+      }
+    }
+    for (const step of input.steps) {
+      if (step.id && existingIds.has(step.id)) {
+        await db.update(projectLiveSteps).set({
+          label: step.label,
+          description: step.description || null,
+          orderIndex: step.orderIndex,
+          updatedAt: /* @__PURE__ */ new Date()
+        }).where(eq7(projectLiveSteps.id, step.id));
+      } else {
+        await db.insert(projectLiveSteps).values({
+          runId: run.id,
+          label: step.label,
+          description: step.description || null,
+          orderIndex: step.orderIndex,
+          status: "pending"
+        });
+      }
+    }
+    const refreshed = await db.select().from(projectLiveSteps).where(eq7(projectLiveSteps.runId, run.id)).orderBy(asc4(projectLiveSteps.orderIndex));
+    const hasActive = refreshed.some((s) => s.status === "active");
+    if (!hasActive && refreshed.length > 0 && run.status === "active") {
+      const firstOpen = refreshed.find((s) => s.status === "pending") || refreshed[0];
+      await db.update(projectLiveSteps).set({
+        status: "active",
+        startedAt: /* @__PURE__ */ new Date(),
+        updatedAt: /* @__PURE__ */ new Date()
+      }).where(eq7(projectLiveSteps.id, firstOpen.id));
+      await db.update(projectLiveRuns).set({ currentStepId: firstOpen.id, updatedAt: /* @__PURE__ */ new Date() }).where(eq7(projectLiveRuns.id, run.id));
+    }
+    await logLiveActivity({
+      userId: ctx.user.id,
+      action: "live_steps_upserted",
+      entityId: run.id,
+      description: `Updated live run steps (${input.steps.length})`
+    });
+    return getLiveRunBundle(run.id);
+  }),
+  defaultStepTemplate: staffProcedure.query(() => {
+    return DEFAULT_LIVE_STEPS.map((s) => ({
+      label: s.label,
+      description: s.description
+    }));
+  }),
+  /** Phase D: WIP rows for Excel/CSV export */
+  getWipExport: protectedProcedure.input(z8.object({ projectId: z8.number() })).query(async ({ ctx, input }) => {
+    const db = await requireDb();
+    const isStaff = isInternalRole(ctx.user.role);
+    if (!isStaff) {
+      const [owned] = await db.select().from(clientProjectsExtended).where(
+        and5(
+          eq7(clientProjectsExtended.id, input.projectId),
+          eq7(clientProjectsExtended.userId, ctx.user.id)
+        )
+      ).limit(1);
+      if (!owned) {
+        throw new TRPCError6({ code: "NOT_FOUND", message: "Project not found" });
+      }
+    }
+    const [project] = await db.select().from(clientProjectsExtended).where(eq7(clientProjectsExtended.id, input.projectId)).limit(1);
+    if (!project) {
+      throw new TRPCError6({ code: "NOT_FOUND", message: "Project not found" });
+    }
+    const live = await getActiveLiveRunForProject(input.projectId);
+    const generatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    return {
+      projectTitle: project.title,
+      commercialStage: project.commercialStage,
+      commitDate: project.commitDate,
+      generatedAt,
+      run: live ? {
+        title: live.run.title,
+        status: live.run.status,
+        percentComplete: live.percentComplete,
+        currentStep: live.currentStep?.label || null
+      } : null,
+      rows: (live?.steps || []).map((step) => ({
+        order: step.orderIndex + 1,
+        label: step.label,
+        description: step.description || "",
+        status: step.status,
+        startedAt: step.startedAt,
+        completedAt: step.completedAt
+      }))
+    };
+  })
+});
+
+// server/opsRouter.ts
+import { and as and6, asc as asc5, desc as desc6, eq as eq8 } from "drizzle-orm";
+import { z as z9 } from "zod";
+import { TRPCError as TRPCError7 } from "@trpc/server";
+import { nanoid as nanoid2 } from "nanoid";
+import { Resend as Resend3 } from "resend";
+
+// server/storage.ts
+function getStorageConfig() {
+  const baseUrl = ENV.forgeApiUrl;
+  const apiKey = ENV.forgeApiKey;
+  if (!baseUrl || !apiKey) {
+    throw new Error(
+      "Storage proxy credentials missing: set BUILT_IN_FORGE_API_URL and BUILT_IN_FORGE_API_KEY"
+    );
+  }
+  return { baseUrl: baseUrl.replace(/\/+$/, ""), apiKey };
+}
+function buildUploadUrl(baseUrl, relKey) {
+  const url = new URL("v1/storage/upload", ensureTrailingSlash(baseUrl));
+  url.searchParams.set("path", normalizeKey(relKey));
+  return url;
+}
+function ensureTrailingSlash(value) {
+  return value.endsWith("/") ? value : `${value}/`;
+}
+function normalizeKey(relKey) {
+  return relKey.replace(/^\/+/, "");
+}
+function toFormData(data, contentType, fileName) {
+  const blob = typeof data === "string" ? new Blob([data], { type: contentType }) : new Blob([data], { type: contentType });
+  const form = new FormData();
+  form.append("file", blob, fileName || "file");
+  return form;
+}
+function buildAuthHeaders(apiKey) {
+  return { Authorization: `Bearer ${apiKey}` };
+}
+async function storagePut(relKey, data, contentType = "application/octet-stream") {
+  const { baseUrl, apiKey } = getStorageConfig();
+  const key = normalizeKey(relKey);
+  const uploadUrl = buildUploadUrl(baseUrl, key);
+  const formData = toFormData(data, contentType, key.split("/").pop() ?? key);
+  const response = await fetch(uploadUrl, {
+    method: "POST",
+    headers: buildAuthHeaders(apiKey),
+    body: formData
+  });
+  if (!response.ok) {
+    const message = await response.text().catch(() => response.statusText);
+    throw new Error(
+      `Storage upload failed (${response.status} ${response.statusText}): ${message}`
+    );
+  }
+  const url = (await response.json()).url;
+  return { key, url };
+}
+
+// server/opsRouter.ts
+var INTERNAL_FIELDS = [
+  "serviceLine",
+  "department",
+  "leadAssigneeId",
+  "internalNotes"
+];
+function toClientProject(project) {
+  const copy = { ...project };
+  for (const key of INTERNAL_FIELDS) {
+    delete copy[key];
+  }
+  return copy;
+}
+async function requireDb2() {
+  const db = await getDb();
+  if (!db) {
+    throw new TRPCError7({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Database not available"
+    });
+  }
+  return db;
+}
+async function getProjectOrThrow(projectId) {
+  const db = await requireDb2();
+  const [project] = await db.select().from(clientProjectsExtended).where(eq8(clientProjectsExtended.id, projectId)).limit(1);
+  if (!project) {
+    throw new TRPCError7({ code: "NOT_FOUND", message: "Project not found" });
+  }
+  return project;
+}
+async function assertOwned(projectId, userId) {
+  const db = await requireDb2();
+  const [project] = await db.select().from(clientProjectsExtended).where(
+    and6(
+      eq8(clientProjectsExtended.id, projectId),
+      eq8(clientProjectsExtended.userId, userId)
+    )
+  ).limit(1);
+  if (!project) {
+    throw new TRPCError7({ code: "NOT_FOUND", message: "Project not found" });
+  }
+  return project;
+}
+async function logEvent(params) {
+  const db = await requireDb2();
+  await db.insert(engagementEvents).values({
+    projectId: params.projectId,
+    type: params.type,
+    message: params.message,
+    actorId: params.actorId || null,
+    isInternal: params.isInternal ?? false,
+    metadata: params.metadata || null
+  });
+}
+async function sendQuotationEmail(params) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.warn("[Ops] RESEND_API_KEY missing \u2014 quotation email skipped");
+    return { sent: false };
+  }
+  const resend = new Resend3(apiKey);
+  const fromEmail = "noreply@hopstecinnovation.com";
+  const result = await resend.emails.send({
+    from: `${COMPANY_NAME} <${fromEmail}>`,
+    to: [params.to],
+    subject: `Quotation ready \u2014 ${params.projectTitle}`,
+    text: [
+      `Hi ${params.clientName},`,
+      "",
+      `${COMPANY_NAME} has prepared a quotation for "${params.projectTitle}" based on your SOW / RFQ.`,
+      "",
+      `View quotation: ${params.quotationUrl}`,
+      params.notes ? `
+Notes:
+${params.notes}` : "",
+      "",
+      "If you accept, please return your approved purchase order (PO). Work starts when we receive the PO.",
+      "",
+      COMPANY_NAME
+    ].filter(Boolean).join("\n")
+  });
+  if (result.error) {
+    console.error("[Ops] Quotation email rejected", result.error.name);
+    return { sent: false };
+  }
+  return { sent: true };
+}
+var docInput = z9.object({
+  projectId: z9.number(),
+  type: z9.enum(["sow", "rfq", "quotation", "po"]),
+  fileName: z9.string().min(1),
+  fileUrl: z9.string().url().refine((value) => /^https?:\/\//i.test(value), "Use an HTTP or HTTPS document link"),
+  notes: z9.string().optional(),
+  status: z9.enum(["draft", "sent", "received", "approved"]).optional()
+});
+var opsRouter = router({
+  uploadCommercialDocument: staffProcedure.input(z9.object({
+    projectId: z9.number(),
+    fileName: z9.string().min(1).max(180),
+    contentType: z9.enum(["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "image/png", "image/jpeg"]),
+    base64: z9.string().min(1).max(1e7)
+  })).mutation(async ({ input }) => {
+    await getProjectOrThrow(input.projectId);
+    const bytes = Buffer.from(input.base64, "base64");
+    if (!bytes.length || bytes.length > 7 * 1024 * 1024) throw new TRPCError7({ code: "PAYLOAD_TOO_LARGE", message: "Choose a document smaller than 7 MB." });
+    const safeName = input.fileName.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "document";
+    try {
+      return await storagePut(`engagements/${input.projectId}/${Date.now()}-${nanoid2(8)}-${safeName}`, bytes, input.contentType);
+    } catch {
+      console.error("[Ops] Commercial document upload failed");
+      throw new TRPCError7({ code: "INTERNAL_SERVER_ERROR", message: "File storage is unavailable. Ask an administrator to configure document storage, or paste a secure document link." });
+    }
+  }),
+  /** Admin intake: inquiries awaiting promotion */
+  listInquiries: staffProcedure.query(async () => {
+    const db = await requireDb2();
+    return db.select().from(projectInquiries).orderBy(desc6(projectInquiries.createdAt)).limit(100);
+  }),
+  /** Admin: all engagements with commercial stage */
+  listEngagements: staffProcedure.query(async () => {
+    const db = await requireDb2();
+    const projects2 = await db.select().from(clientProjectsExtended).orderBy(desc6(clientProjectsExtended.updatedAt));
+    const allUsers = await db.select().from(users);
+    const byId = new Map(allUsers.map((u) => [u.id, u]));
+    return projects2.map((p) => ({
+      ...p,
+      clientName: byId.get(p.userId)?.name || null,
+      clientEmail: byId.get(p.userId)?.email || null,
+      assigneeName: p.leadAssigneeId ? byId.get(p.leadAssigneeId)?.name || null : null
+    }));
+  }),
+  getEngagement: staffProcedure.input(z9.object({ projectId: z9.number() })).query(async ({ input }) => {
+    const db = await requireDb2();
+    const project = await getProjectOrThrow(input.projectId);
+    const docs = await db.select().from(engagementDocuments).where(eq8(engagementDocuments.projectId, input.projectId)).orderBy(desc6(engagementDocuments.createdAt));
+    const events = await db.select().from(engagementEvents).where(eq8(engagementEvents.projectId, input.projectId)).orderBy(desc6(engagementEvents.createdAt)).limit(50);
+    const [client] = await db.select().from(users).where(eq8(users.id, project.userId)).limit(1);
+    const assignee = project.leadAssigneeId ? (await db.select().from(users).where(eq8(users.id, project.leadAssigneeId)).limit(1))[0] : null;
+    return { project, docs, events, client, assignee };
+  }),
+  /** Promote inquiry into a client project at intake stage */
+  promoteInquiry: staffProcedure.input(
+    z9.object({
+      inquiryId: z9.number(),
+      userId: z9.number().optional(),
+      title: z9.string().min(2).optional()
+    })
+  ).mutation(async ({ ctx, input }) => {
+    const db = await requireDb2();
+    const [inquiry] = await db.select().from(projectInquiries).where(eq8(projectInquiries.id, input.inquiryId)).limit(1);
+    if (!inquiry) {
+      throw new TRPCError7({ code: "NOT_FOUND", message: "Inquiry not found" });
+    }
+    if (inquiry.status === "accepted") {
+      throw new TRPCError7({ code: "CONFLICT", message: "This inquiry has already been promoted." });
+    }
+    let userId = input.userId;
+    if (!userId) {
+      const [existing] = await db.select().from(users).where(eq8(users.email, inquiry.email)).limit(1);
+      if (existing) {
+        userId = existing.id;
+      } else {
+        throw new TRPCError7({
+          code: "BAD_REQUEST",
+          message: "No portal user for this email yet. Create/invite the client account first, then promote."
+        });
+      }
+    }
+    const [project] = await db.insert(clientProjectsExtended).values({
+      userId,
+      title: input.title || inquiry.projectType || "New engagement",
+      description: inquiry.description,
+      projectType: inquiry.projectType,
+      status: "planning",
+      commercialStage: "intake",
+      progress: 0
+    }).returning();
+    await db.update(projectInquiries).set({ status: "accepted" }).where(eq8(projectInquiries.id, inquiry.id));
+    await logEvent({
+      projectId: project.id,
+      type: "intake_created",
+      message: `Engagement created from inquiry #${inquiry.id}`,
+      actorId: ctx.user.id,
+      isInternal: true
+    });
+    return project;
+  }),
+  /** Client or staff: attach SOW / RFQ / quotation / PO */
+  addDocument: protectedProcedure.input(docInput).mutation(async ({ ctx, input }) => {
+    const db = await requireDb2();
+    const isStaff = isInternalRole(ctx.user.role);
+    if (!isStaff) {
+      await assertOwned(input.projectId, ctx.user.id);
+      if (input.type === "quotation") {
+        throw new TRPCError7({
+          code: "FORBIDDEN",
+          message: "Only Hopstec can upload quotations"
+        });
+      }
+    }
+    const project = await getProjectOrThrow(input.projectId);
+    const defaultStatus = (isStaff ? input.status : "received") || (input.type === "quotation" ? "draft" : input.type === "po" ? "received" : "received");
+    const [doc] = await db.insert(engagementDocuments).values({
+      projectId: input.projectId,
+      type: input.type,
+      status: defaultStatus,
+      fileName: input.fileName,
+      fileUrl: input.fileUrl,
+      notes: input.notes || null,
+      uploadedBy: ctx.user.id,
+      uploadedByRole: isStaff ? "staff" : "client"
+    }).returning();
+    let nextStage = project.commercialStage;
+    if (input.type === "sow" || input.type === "rfq") {
+      if (project.commercialStage === "intake") nextStage = "quoting";
+    }
+    if (input.type === "po" && (defaultStatus === "received" || defaultStatus === "approved")) {
+      if (project.commercialStage === "awaiting_po" || project.commercialStage === "quoting") {
+        nextStage = "awaiting_po";
+      }
+    }
+    if (nextStage !== project.commercialStage) {
+      await db.update(clientProjectsExtended).set({ commercialStage: nextStage, updatedAt: /* @__PURE__ */ new Date() }).where(eq8(clientProjectsExtended.id, project.id));
+    }
+    await logEvent({
+      projectId: project.id,
+      type: `doc_${input.type}_added`,
+      message: `${input.type.toUpperCase()} document added: ${input.fileName}`,
+      actorId: ctx.user.id,
+      isInternal: false,
+      metadata: { documentId: doc.id }
+    });
+    return doc;
+  }),
+  sendQuotation: staffProcedure.input(
+    z9.object({
+      projectId: z9.number(),
+      documentId: z9.number(),
+      notifyClient: z9.boolean().default(true)
+    })
+  ).mutation(async ({ ctx, input }) => {
+    const db = await requireDb2();
+    const project = await getProjectOrThrow(input.projectId);
+    if (project.commitDate || !["intake", "quoting", "awaiting_po"].includes(project.commercialStage)) {
+      throw new TRPCError7({ code: "PRECONDITION_FAILED", message: "This engagement is already committed. Its commercial stage cannot be reset by sending a quotation." });
+    }
+    const [doc] = await db.select().from(engagementDocuments).where(
+      and6(
+        eq8(engagementDocuments.id, input.documentId),
+        eq8(engagementDocuments.projectId, input.projectId),
+        eq8(engagementDocuments.type, "quotation")
+      )
+    ).limit(1);
+    if (!doc) {
+      throw new TRPCError7({ code: "NOT_FOUND", message: "Quotation not found" });
+    }
+    await db.update(engagementDocuments).set({ status: "sent", updatedAt: /* @__PURE__ */ new Date() }).where(eq8(engagementDocuments.id, doc.id));
+    await db.update(clientProjectsExtended).set({
+      commercialStage: "awaiting_po",
+      updatedAt: /* @__PURE__ */ new Date()
+    }).where(eq8(clientProjectsExtended.id, project.id));
+    const [client] = await db.select().from(users).where(eq8(users.id, project.userId)).limit(1);
+    let emailSent = false;
+    if (input.notifyClient && client?.email) {
+      try {
+        const delivery = await sendQuotationEmail({
+          to: client.email,
+          clientName: client.name || "there",
+          projectTitle: project.title,
+          quotationUrl: doc.fileUrl,
+          notes: doc.notes
+        });
+        emailSent = delivery.sent;
+      } catch (error) {
+        console.error("[Ops] Quotation notification failed");
+      }
+    }
+    await logEvent({
+      projectId: project.id,
+      type: "quotation_sent",
+      message: "Quotation sent to client \u2014 awaiting approved PO",
+      actorId: ctx.user.id
+    });
+    return { success: true, emailSent };
+  }),
+  markQuotationAccepted: staffProcedure.input(z9.object({ projectId: z9.number() })).mutation(async ({ ctx, input }) => {
+    const db = await requireDb2();
+    const project = await getProjectOrThrow(input.projectId);
+    if (project.commitDate || project.commercialStage !== "awaiting_po") {
+      throw new TRPCError7({ code: "PRECONDITION_FAILED", message: "Send a quotation before recording acceptance." });
+    }
+    const [quotation] = await db.select().from(engagementDocuments).where(and6(
+      eq8(engagementDocuments.projectId, input.projectId),
+      eq8(engagementDocuments.type, "quotation"),
+      eq8(engagementDocuments.status, "sent")
+    )).limit(1);
+    if (!quotation) throw new TRPCError7({ code: "PRECONDITION_FAILED", message: "A sent quotation is required." });
+    const now = /* @__PURE__ */ new Date();
+    await db.update(clientProjectsExtended).set({
+      quotationAcceptedAt: now,
+      commercialStage: "awaiting_po",
+      updatedAt: now
+    }).where(eq8(clientProjectsExtended.id, input.projectId));
+    await logEvent({
+      projectId: input.projectId,
+      type: "quotation_accepted",
+      message: "Client accepted quotation \u2014 awaiting approved PO",
+      actorId: ctx.user.id
+    });
+    return { success: true };
+  }),
+  /** PO reception = commit date locked; work may start */
+  recordPoReceived: staffProcedure.input(
+    z9.object({
+      projectId: z9.number(),
+      documentId: z9.number(),
+      commitDate: z9.date().optional()
+    })
+  ).mutation(async ({ ctx, input }) => {
+    const db = await requireDb2();
+    const project = await getProjectOrThrow(input.projectId);
+    if (project.commitDate) {
+      throw new TRPCError7({ code: "CONFLICT", message: "The commit date is already locked." });
+    }
+    if (project.commercialStage !== "awaiting_po" || !project.quotationAcceptedAt) {
+      throw new TRPCError7({ code: "PRECONDITION_FAILED", message: "Record quotation acceptance before confirming the approved PO." });
+    }
+    const [po] = await db.select().from(engagementDocuments).where(and6(
+      eq8(engagementDocuments.id, input.documentId),
+      eq8(engagementDocuments.projectId, input.projectId),
+      eq8(engagementDocuments.type, "po")
+    )).limit(1);
+    if (!po) throw new TRPCError7({ code: "BAD_REQUEST", message: "Attach this engagement\u2019s approved purchase order first." });
+    const commitDate = input.commitDate || /* @__PURE__ */ new Date();
+    if (input.documentId) {
+      await db.update(engagementDocuments).set({ status: "approved", updatedAt: /* @__PURE__ */ new Date() }).where(
+        and6(
+          eq8(engagementDocuments.id, input.documentId),
+          eq8(engagementDocuments.projectId, input.projectId)
+        )
+      );
+    }
+    await db.update(clientProjectsExtended).set({
+      poReceivedAt: commitDate,
+      commitDate,
+      commercialStage: "committed",
+      status: "in_progress",
+      updatedAt: /* @__PURE__ */ new Date()
+    }).where(eq8(clientProjectsExtended.id, project.id));
+    await logEvent({
+      projectId: project.id,
+      type: "po_received_commit",
+      message: `Approved PO received \u2014 commit date ${commitDate.toISOString().slice(0, 10)}. Work may start.`,
+      actorId: ctx.user.id
+    });
+    return { success: true, commitDate };
+  }),
+  /** Phase B: internal dispatch */
+  updateDispatch: staffProcedure.input(
+    z9.object({
+      projectId: z9.number(),
+      serviceLine: z9.string().max(120).nullable().optional(),
+      department: z9.string().max(120).nullable().optional(),
+      leadAssigneeId: z9.number().nullable().optional(),
+      internalNotes: z9.string().nullable().optional()
+    })
+  ).mutation(async ({ ctx, input }) => {
+    const db = await requireDb2();
+    await getProjectOrThrow(input.projectId);
+    if (input.leadAssigneeId != null) {
+      const [assignee] = await db.select({ role: users.role }).from(users).where(eq8(users.id, input.leadAssigneeId)).limit(1);
+      if (!assignee || !isInternalRole(assignee.role)) throw new TRPCError7({ code: "BAD_REQUEST", message: "Assign a provisioned staff member as delivery lead." });
+    }
+    const patch = { updatedAt: /* @__PURE__ */ new Date() };
+    if (input.serviceLine !== void 0) patch.serviceLine = input.serviceLine;
+    if (input.department !== void 0) patch.department = input.department;
+    if (input.leadAssigneeId !== void 0) {
+      patch.leadAssigneeId = input.leadAssigneeId;
+    }
+    if (input.internalNotes !== void 0) {
+      patch.internalNotes = input.internalNotes;
+    }
+    await db.update(clientProjectsExtended).set(patch).where(eq8(clientProjectsExtended.id, input.projectId));
+    await logEvent({
+      projectId: input.projectId,
+      type: "dispatch_updated",
+      message: "Internal dispatch updated",
+      actorId: ctx.user.id,
+      isInternal: true,
+      metadata: {
+        serviceLine: input.serviceLine,
+        department: input.department,
+        leadAssigneeId: input.leadAssigneeId
+      }
+    });
+    return { success: true };
+  }),
+  listStaff: staffProcedure.query(async () => {
+    const db = await requireDb2();
+    const rows = await db.select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      role: users.role,
+      jobTitle: users.jobTitle
+    }).from(users).orderBy(asc5(users.name));
+    return rows.filter((row) => isInternalRole(row.role));
+  }),
+  /** Admin-only: grant Hopstec team access + engineering job title. */
+  setStaffAccess: adminProcedure.input(
+    z9.object({
+      userId: z9.number(),
+      role: z9.enum(["admin", "staff", "client"]),
+      jobTitle: z9.enum(STAFF_JOB_TITLES).nullable().optional()
+    })
+  ).mutation(async ({ ctx, input }) => {
+    const db = await requireDb2();
+    if (input.userId === ctx.user.id && input.role !== "admin") {
+      throw new TRPCError7({ code: "BAD_REQUEST", message: "You cannot revoke your own administrator access." });
+    }
+    const [target] = await db.select().from(users).where(eq8(users.id, input.userId)).limit(1);
+    if (!target) {
+      throw new TRPCError7({ code: "NOT_FOUND", message: "User not found" });
+    }
+    await db.update(users).set({
+      role: input.role,
+      jobTitle: input.role === "client" ? null : input.jobTitle === void 0 ? target.jobTitle : input.jobTitle,
+      updatedAt: /* @__PURE__ */ new Date()
+    }).where(eq8(users.id, input.userId));
+    return { success: true };
+  }),
+  /** Client-safe commercial timeline */
+  getCommercialTimeline: protectedProcedure.input(z9.object({ projectId: z9.number() })).query(async ({ ctx, input }) => {
+    const db = await requireDb2();
+    const isStaff = isInternalRole(ctx.user.role);
+    const project = isStaff ? await getProjectOrThrow(input.projectId) : await assertOwned(input.projectId, ctx.user.id);
+    const docs = await db.select().from(engagementDocuments).where(eq8(engagementDocuments.projectId, input.projectId)).orderBy(asc5(engagementDocuments.createdAt));
+    const events = await db.select().from(engagementEvents).where(eq8(engagementEvents.projectId, input.projectId)).orderBy(asc5(engagementEvents.createdAt));
+    const publicEvents = isStaff ? events : events.filter((e) => !e.isInternal);
+    return {
+      project: isStaff ? project : toClientProject(project),
+      docs: isStaff ? docs : docs.filter((doc) => doc.type !== "quotation" || doc.status !== "draft"),
+      events: publicEvents,
+      stages: [
+        { id: "intake", label: "Intake" },
+        { id: "quoting", label: "SOW / RFQ \u2192 Quotation" },
+        { id: "awaiting_po", label: "Awaiting approved PO" },
+        { id: "committed", label: "Committed" },
+        { id: "in_delivery", label: "In delivery" },
+        { id: "closed", label: "Closed" }
+      ]
+    };
+  }),
+  /** Phase D: cycle-time KPIs from commit date */
+  getDeliveryKpis: protectedProcedure.input(z9.object({ projectId: z9.number() })).query(async ({ ctx, input }) => {
+    const isStaff = isInternalRole(ctx.user.role);
+    const project = isStaff ? await getProjectOrThrow(input.projectId) : await assertOwned(input.projectId, ctx.user.id);
+    if (!project.commitDate) {
+      return {
+        committed: false,
+        commitDate: null,
+        daysSinceCommit: null,
+        commercialStage: project.commercialStage
+      };
+    }
+    const daysSinceCommit = Math.max(
+      0,
+      Math.floor(
+        (Date.now() - new Date(project.commitDate).getTime()) / (1e3 * 60 * 60 * 24)
+      )
+    );
+    return {
+      committed: true,
+      commitDate: project.commitDate,
+      daysSinceCommit,
+      commercialStage: project.commercialStage,
+      poReceivedAt: project.poReceivedAt,
+      quotationAcceptedAt: project.quotationAcceptedAt
+    };
+  }),
+  setDeliveryStage: staffProcedure.input(
+    z9.object({
+      projectId: z9.number(),
+      commercialStage: z9.enum([
+        "intake",
+        "quoting",
+        "awaiting_po",
+        "committed",
+        "in_delivery",
+        "closed"
+      ])
+    })
+  ).mutation(async ({ ctx, input }) => {
+    const db = await requireDb2();
+    const project = await getProjectOrThrow(input.projectId);
+    if (input.commercialStage !== project.commercialStage) {
+      throw new TRPCError7({ code: "PRECONDITION_FAILED", message: "Use the commercial document and live delivery actions to advance this engagement." });
+    }
+    await db.update(clientProjectsExtended).set({
+      commercialStage: input.commercialStage,
+      updatedAt: /* @__PURE__ */ new Date()
+    }).where(eq8(clientProjectsExtended.id, input.projectId));
+    await logEvent({
+      projectId: input.projectId,
+      type: "stage_set",
+      message: `Commercial stage set to ${input.commercialStage}`,
+      actorId: ctx.user.id,
+      isInternal: true
+    });
+    return { success: true };
+  }),
+  /** Admin directory — provision engineering roles. */
+  listDirectoryUsers: adminProcedure.query(async () => {
+    const db = await requireDb2();
+    return db.select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      role: users.role,
+      jobTitle: users.jobTitle,
+      lastSignedIn: users.lastSignedIn
+    }).from(users).orderBy(asc5(users.email));
+  }),
+  provisionStaffByEmail: adminProcedure.input(
+    z9.object({
+      email: z9.string().email(),
+      name: z9.string().min(2).optional(),
+      role: z9.enum(["admin", "staff"]),
+      jobTitle: z9.enum(STAFF_JOB_TITLES)
+    })
+  ).mutation(async ({ input }) => {
+    const db = await requireDb2();
+    let user = await getUserByEmail(input.email);
+    if (!user) {
+      const openId = `magic_${nanoid2(16)}`;
+      await upsertUser({
+        openId,
+        email: input.email,
+        name: input.name || input.email.split("@")[0],
+        loginMethod: "magic-link",
+        role: input.role,
+        jobTitle: input.jobTitle,
+        lastSignedIn: /* @__PURE__ */ new Date()
+      });
+      user = await getUserByEmail(input.email);
+    } else {
+      await db.update(users).set({
+        role: input.role,
+        jobTitle: input.jobTitle,
+        name: input.name || user.name,
+        updatedAt: /* @__PURE__ */ new Date()
+      }).where(eq8(users.id, user.id));
+      user = await getUserByEmail(input.email);
+    }
+    if (!user) {
+      throw new TRPCError7({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Failed to provision staff user"
+      });
+    }
+    return {
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        jobTitle: user.jobTitle
+      }
+    };
+  })
+});
+
 // server/routers.ts
 var appRouter = router({
   // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -3131,6 +4623,8 @@ var appRouter = router({
   contact: contactRouter,
   clientPortal: clientPortalRouter,
   magicLink: magicLinkRouter,
+  liveRun: liveRunRouter,
+  ops: opsRouter,
   // Test router (remove in production)
   testEmail: testEmailRouter
 });

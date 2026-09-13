@@ -16,6 +16,7 @@ import {
 } from "../drizzle/schema";
 import { COMPANY_NAME } from "../shared/const";
 import { Resend } from "resend";
+import { storagePut } from "./storage";
 
 const INTERNAL_FIELDS = [
   "serviceLine",
@@ -107,7 +108,7 @@ async function sendQuotationEmail(params: {
   }
   const resend = new Resend(apiKey);
   const fromEmail = "noreply@hopstecinnovation.com";
-  await resend.emails.send({
+  const result = await resend.emails.send({
     from: `${COMPANY_NAME} <${fromEmail}>`,
     to: [params.to],
     subject: `Quotation ready — ${params.projectTitle}`,
@@ -126,6 +127,10 @@ async function sendQuotationEmail(params: {
       .filter(Boolean)
       .join("\n"),
   });
+  if (result.error) {
+    console.error("[Ops] Quotation email rejected", result.error.name);
+    return { sent: false as const };
+  }
   return { sent: true as const };
 }
 
@@ -133,12 +138,27 @@ const docInput = z.object({
   projectId: z.number(),
   type: z.enum(["sow", "rfq", "quotation", "po"]),
   fileName: z.string().min(1),
-  fileUrl: z.string().url().or(z.string().min(3)),
+  fileUrl: z.string().url().refine(value => /^https?:\/\//i.test(value), "Use an HTTP or HTTPS document link"),
   notes: z.string().optional(),
   status: z.enum(["draft", "sent", "received", "approved"]).optional(),
 });
 
 export const opsRouter = router({
+  uploadCommercialDocument: staffProcedure
+    .input(z.object({
+      projectId: z.number(), fileName: z.string().min(1).max(180),
+      contentType: z.enum(["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "image/png", "image/jpeg"]),
+      base64: z.string().min(1).max(10_000_000),
+    }))
+    .mutation(async ({ input }) => {
+      await getProjectOrThrow(input.projectId);
+      const bytes = Buffer.from(input.base64, "base64");
+      if (!bytes.length || bytes.length > 7 * 1024 * 1024) throw new TRPCError({ code: "PAYLOAD_TOO_LARGE", message: "Choose a document smaller than 7 MB." });
+      const safeName = input.fileName.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "document";
+      try { return await storagePut(`engagements/${input.projectId}/${Date.now()}-${nanoid(8)}-${safeName}`, bytes, input.contentType); }
+      catch { console.error("[Ops] Commercial document upload failed"); throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "File storage is unavailable. Ask an administrator to configure document storage, or paste a secure document link." }); }
+    }),
+
   /** Admin intake: inquiries awaiting promotion */
   listInquiries: staffProcedure.query(async () => {
     const db = await requireDb();
@@ -222,6 +242,9 @@ export const opsRouter = router({
       if (!inquiry) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Inquiry not found" });
       }
+      if (inquiry.status === "accepted") {
+        throw new TRPCError({ code: "CONFLICT", message: "This inquiry has already been promoted." });
+      }
 
       let userId = input.userId;
       if (!userId) {
@@ -288,7 +311,7 @@ export const opsRouter = router({
 
       const project = await getProjectOrThrow(input.projectId);
       const defaultStatus =
-        input.status ||
+        (isStaff ? input.status : "received") ||
         (input.type === "quotation"
           ? "draft"
           : input.type === "po"
@@ -354,6 +377,9 @@ export const opsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const db = await requireDb();
       const project = await getProjectOrThrow(input.projectId);
+      if (project.commitDate || !["intake", "quoting", "awaiting_po"].includes(project.commercialStage)) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "This engagement is already committed. Its commercial stage cannot be reset by sending a quotation." });
+      }
       const [doc] = await db
         .select()
         .from(engagementDocuments)
@@ -388,14 +414,20 @@ export const opsRouter = router({
         .where(eq(users.id, project.userId))
         .limit(1);
 
+      let emailSent = false;
       if (input.notifyClient && client?.email) {
-        await sendQuotationEmail({
+        try {
+        const delivery = await sendQuotationEmail({
           to: client.email,
           clientName: client.name || "there",
           projectTitle: project.title,
           quotationUrl: doc.fileUrl,
           notes: doc.notes,
         });
+        emailSent = delivery.sent;
+        } catch (error) {
+          console.error("[Ops] Quotation notification failed");
+        }
       }
 
       await logEvent({
@@ -405,13 +437,23 @@ export const opsRouter = router({
         actorId: ctx.user.id,
       });
 
-      return { success: true };
+      return { success: true, emailSent };
     }),
 
   markQuotationAccepted: staffProcedure
     .input(z.object({ projectId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const db = await requireDb();
+      const project = await getProjectOrThrow(input.projectId);
+      if (project.commitDate || project.commercialStage !== "awaiting_po") {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Send a quotation before recording acceptance." });
+      }
+      const [quotation] = await db.select().from(engagementDocuments).where(and(
+        eq(engagementDocuments.projectId, input.projectId),
+        eq(engagementDocuments.type, "quotation"),
+        eq(engagementDocuments.status, "sent")
+      )).limit(1);
+      if (!quotation) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "A sent quotation is required." });
       const now = new Date();
       await db
         .update(clientProjectsExtended)
@@ -435,13 +477,25 @@ export const opsRouter = router({
     .input(
       z.object({
         projectId: z.number(),
-        documentId: z.number().optional(),
+        documentId: z.number(),
         commitDate: z.date().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const db = await requireDb();
       const project = await getProjectOrThrow(input.projectId);
+      if (project.commitDate) {
+        throw new TRPCError({ code: "CONFLICT", message: "The commit date is already locked." });
+      }
+      if (project.commercialStage !== "awaiting_po" || !project.quotationAcceptedAt) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Record quotation acceptance before confirming the approved PO." });
+      }
+      const [po] = await db.select().from(engagementDocuments).where(and(
+        eq(engagementDocuments.id, input.documentId),
+        eq(engagementDocuments.projectId, input.projectId),
+        eq(engagementDocuments.type, "po")
+      )).limit(1);
+      if (!po) throw new TRPCError({ code: "BAD_REQUEST", message: "Attach this engagement’s approved purchase order first." });
       const commitDate = input.commitDate || new Date();
 
       if (input.documentId) {
@@ -491,6 +545,10 @@ export const opsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const db = await requireDb();
       await getProjectOrThrow(input.projectId);
+      if (input.leadAssigneeId != null) {
+        const [assignee] = await db.select({ role: users.role }).from(users).where(eq(users.id, input.leadAssigneeId)).limit(1);
+        if (!assignee || !isInternalRole(assignee.role)) throw new TRPCError({ code: "BAD_REQUEST", message: "Assign a provisioned staff member as delivery lead." });
+      }
       const patch: Record<string, unknown> = { updatedAt: new Date() };
       if (input.serviceLine !== undefined) patch.serviceLine = input.serviceLine;
       if (input.department !== undefined) patch.department = input.department;
@@ -546,8 +604,11 @@ export const opsRouter = router({
         jobTitle: z.enum(STAFF_JOB_TITLES).nullable().optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const db = await requireDb();
+      if (input.userId === ctx.user.id && input.role !== "admin") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "You cannot revoke your own administrator access." });
+      }
       const [target] = await db
         .select()
         .from(users)
@@ -603,7 +664,7 @@ export const opsRouter = router({
 
       return {
         project: isStaff ? project : toClientProject(project as unknown as Record<string, unknown>),
-        docs,
+        docs: isStaff ? docs : docs.filter(doc => doc.type !== "quotation" || doc.status !== "draft"),
         events: publicEvents,
         stages: [
           { id: "intake", label: "Intake" },
@@ -668,6 +729,12 @@ export const opsRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const db = await requireDb();
+      const project = await getProjectOrThrow(input.projectId);
+      // Commercial gates are advanced by the document actions; this endpoint
+      // cannot be used to bypass PO confirmation or reopen a committed project.
+      if (input.commercialStage !== project.commercialStage) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Use the commercial document and live delivery actions to advance this engagement." });
+      }
       await db
         .update(clientProjectsExtended)
         .set({

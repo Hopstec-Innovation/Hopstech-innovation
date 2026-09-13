@@ -18,6 +18,7 @@ export interface AuthState {
 }
 
 export function useAuth() {
+  const [timedOut, setTimedOut] = useState(false);
   const [authState, setAuthState] = useState<AuthState>({
     isAuthenticated: false,
     user: null,
@@ -25,13 +26,19 @@ export function useAuth() {
   });
 
   // Get current session
-  const { data: sessionData, isLoading, refetch } = trpc.magicLink.getCurrentSession.useQuery(
+  const { data: sessionData, isLoading, isError, refetch } = trpc.magicLink.getCurrentSession.useQuery(
     undefined,
     {
       retry: false,
       refetchOnWindowFocus: false,
     }
   );
+
+  useEffect(() => {
+    if (!isLoading) { setTimedOut(false); return; }
+    const timer = window.setTimeout(() => setTimedOut(true), 10000);
+    return () => window.clearTimeout(timer);
+  }, [isLoading]);
 
   useEffect(() => {
     if (!isLoading && sessionData) {
@@ -49,14 +56,14 @@ export function useAuth() {
         } : null,
         isLoading: false,
       });
-    } else if (!isLoading) {
+    } else if (!isLoading || isError || timedOut) {
       setAuthState({
         isAuthenticated: false,
         user: null,
         isLoading: false,
       });
     }
-  }, [sessionData, isLoading]);
+  }, [sessionData, isLoading, isError, timedOut]);
 
   const refreshSession = async () => {
     await refetch();
@@ -64,6 +71,7 @@ export function useAuth() {
 
   return {
     ...authState,
+    authUnavailable: isError || timedOut,
     refreshSession,
   };
 }

@@ -17,6 +17,7 @@ import {
   getLiveRunBundle,
   getLiveRunsForUserProjects,
   logLiveActivity,
+  toClientLiveRun,
 } from "./liveRunHelpers";
 
 async function requireDb() {
@@ -51,15 +52,23 @@ async function assertProjectOwnedByUser(projectId: number, userId: number) {
 export const liveRunRouter = router({
   /** Client: active/paused runs across owned projects (dashboard Live Now) */
   getMyLiveRuns: protectedProcedure.query(async ({ ctx }) => {
-    return getLiveRunsForUserProjects(ctx.user.id);
+    return (await getLiveRunsForUserProjects(ctx.user.id)).map(bundle => toClientLiveRun(bundle)!);
   }),
 
   /** Client: active/paused run for one owned project */
   getActiveLiveRun: protectedProcedure
     .input(z.object({ projectId: z.number() }))
     .query(async ({ ctx, input }) => {
-      await assertProjectOwnedByUser(input.projectId, ctx.user.id);
-      return getActiveLiveRunForProject(input.projectId);
+      const project = await assertProjectOwnedByUser(input.projectId, ctx.user.id);
+      if (!project.commitDate || !project.poReceivedAt) return null;
+      const active = await getActiveLiveRunForProject(input.projectId);
+      if (active) return toClientLiveRun(active);
+      // Keep the completed handover visible instead of making progress disappear.
+      const db = await requireDb();
+      const [latest] = await db.select().from(projectLiveRuns).where(and(
+        eq(projectLiveRuns.projectId, input.projectId), eq(projectLiveRuns.status, "completed")
+      )).orderBy(desc(projectLiveRuns.createdAt)).limit(1);
+      return latest ? toClientLiveRun(await getLiveRunBundle(latest.id)) : null;
     }),
 
   /** Admin: list all client projects with optional active run summary */
@@ -155,10 +164,9 @@ export const liveRunRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
       }
 
-      const committed =
+      const committed = !!project.commitDate && (
         project.commercialStage === "committed" ||
-        project.commercialStage === "in_delivery" ||
-        !!project.commitDate;
+        project.commercialStage === "in_delivery");
       if (!committed || !project.poReceivedAt) {
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
@@ -408,6 +416,10 @@ export const liveRunRouter = router({
     .input(z.object({ runId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const db = await requireDb();
+      const steps = await db.select().from(projectLiveSteps).where(eq(projectLiveSteps.runId, input.runId));
+      if (steps.some(step => step.status === "pending" || step.status === "active")) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Complete or explicitly skip each delivery step before closing the run." });
+      }
       const now = new Date();
       const [run] = await db
         .update(projectLiveRuns)
@@ -421,6 +433,8 @@ export const liveRunRouter = router({
       if (!run) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Live run not found" });
       }
+
+      await db.update(clientProjectsExtended).set({ commercialStage: "closed", status: "completed", progress: 100, updatedAt: now }).where(eq(clientProjectsExtended.id, run.projectId));
 
       // Mark remaining active/pending as skipped for a clean terminal state
       const openSteps = await db
