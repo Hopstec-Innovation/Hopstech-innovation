@@ -499,6 +499,44 @@ export type ProjectType = typeof projectTypes.$inferSelect;
 export type InsertProjectType = typeof projectTypes.$inferInsert;
 
 /**
+ * Temporary client-generated quotation simulations (subject to approval)
+ */
+export const tempQuotations = pgTable("tempQuotations", {
+  id: serial("id").primaryKey(),
+  publicId: varchar("publicId", { length: 40 }).notNull().unique(),
+  reference: varchar("reference", { length: 48 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 320 }).notNull(),
+  company: varchar("company", { length: 255 }),
+  phone: varchar("phone", { length: 50 }),
+  projectType: varchar("projectType", { length: 100 }).notNull(),
+  currency: varchar("currency", { length: 10 }).notNull().default("EUR"),
+  complexity: varchar("complexity", { length: 20 }).notNull(),
+  scope: integer("scope").notNull(),
+  timelineMonths: integer("timelineMonths").notNull(),
+  addonIds: jsonb("addonIds").$type<string[]>().default([]),
+  minEur: integer("minEur").notNull(),
+  maxEur: integer("maxEur").notNull(),
+  midEur: integer("midEur").notNull(),
+  minLocal: integer("minLocal").notNull(),
+  maxLocal: integer("maxLocal").notNull(),
+  midLocal: integer("midLocal").notNull(),
+  description: text("description"),
+  snapshot: jsonb("snapshot").$type<Record<string, unknown>>().notNull(),
+  status: varchar("status", { length: 30 }).notNull().default("temporary"),
+  expiresAt: timestamp("expiresAt", { mode: "date", withTimezone: true }).notNull(),
+  emailedAt: timestamp("emailedAt", { mode: "date", withTimezone: true }),
+  createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  publicIdIdx: uniqueIndex("temp_quotations_public_id_idx").on(table.publicId),
+  emailIdx: index("temp_quotations_email_idx").on(table.email),
+  expiresAtIdx: index("temp_quotations_expires_at_idx").on(table.expiresAt),
+}));
+
+export type TempQuotation = typeof tempQuotations.$inferSelect;
+export type InsertTempQuotation = typeof tempQuotations.$inferInsert;
+
+/**
  * Project Files table - file uploads for projects
  */
 export const projectFiles = pgTable("projectFiles", {
