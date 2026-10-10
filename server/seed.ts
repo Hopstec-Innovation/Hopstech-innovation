@@ -555,65 +555,100 @@ Continuous Integration and Continuous Deployment (CI/CD) are fundamental to mode
       }
     ]);
 
-    // Seed Project Types
+    // Seed Project Types (aligned with public inquiry offerings)
     console.log("🏷️  Seeding project types...");
     await db.insert(projectTypes).values([
       {
-        name: "Web Application",
-        description: "Full-stack web applications with modern frameworks",
+        name: "Custom Web Application",
+        description: "Client portals, dashboards, and full-stack web products",
         icon: "Globe",
         active: true,
-        order: 1
+        order: 1,
       },
       {
         name: "Mobile Application",
-        description: "Native or cross-platform mobile apps",
+        description: "iOS, Android, or cross-platform consumer/business apps",
         icon: "Smartphone",
         active: true,
-        order: 2
+        order: 2,
       },
       {
         name: "DevOps & Infrastructure",
-        description: "CI/CD pipelines, cloud infrastructure, and automation",
+        description: "CI/CD, containers, cloud ops, and delivery pipelines",
         icon: "Server",
         active: true,
-        order: 3
+        order: 3,
       },
       {
-        name: "E-commerce Platform",
-        description: "Online stores and marketplace solutions",
-        icon: "ShoppingCart",
+        name: "Automation & Internal Tooling",
+        description: "Workflows, ops dashboards, and process automation",
+        icon: "Workflow",
         active: true,
-        order: 4
+        order: 4,
       },
       {
-        name: "API Development",
-        description: "RESTful or GraphQL API services",
-        icon: "Code",
-        active: true,
-        order: 5
-      },
-      {
-        name: "Cloud Migration",
-        description: "Migrate existing systems to cloud platforms",
+        name: "Cloud Migration & Architecture",
+        description: "AWS, GCP, Azure design, migration, and optimisation",
         icon: "Cloud",
         active: true,
-        order: 6
+        order: 5,
       },
       {
-        name: "Consulting & Strategy",
-        description: "Technical consulting and architecture planning",
+        name: "HealthTech & Regulated Systems",
+        description: "GDPR-aware health products, RPPS, clinical data flows",
+        icon: "HeartPulse",
+        active: true,
+        order: 6,
+      },
+      {
+        name: "IoT & Connected Devices",
+        description: "Firmware, MQTT, device fleets, and live monitoring",
+        icon: "Cpu",
+        active: true,
+        order: 7,
+      },
+      {
+        name: "AI Integration",
+        description: "LLM features, analysis pipelines, and recommendations",
+        icon: "Brain",
+        active: true,
+        order: 8,
+      },
+      {
+        name: "API Development & Integrations",
+        description: "REST/GraphQL APIs and third-party system glue",
+        icon: "Code",
+        active: true,
+        order: 9,
+      },
+      {
+        name: "E-commerce & Marketplace",
+        description: "Stores, payments, catalogues, and marketplace flows",
+        icon: "ShoppingCart",
+        active: true,
+        order: 10,
+      },
+      {
+        name: "Technical Consulting & Strategy",
+        description: "Architecture reviews, roadmap, and delivery planning",
         icon: "Lightbulb",
         active: true,
-        order: 7
+        order: 11,
       },
       {
         name: "Maintenance & Support",
-        description: "Ongoing maintenance and technical support",
+        description: "Ongoing care, upgrades, and production support",
         icon: "Wrench",
         active: true,
-        order: 8
-      }
+        order: 12,
+      },
+      {
+        name: "Other / Not sure yet",
+        description: "Describe the problem - we will map the right engagement",
+        icon: "HelpCircle",
+        active: true,
+        order: 13,
+      },
     ]);
 
     console.log("✅ Database seeded successfully!");
