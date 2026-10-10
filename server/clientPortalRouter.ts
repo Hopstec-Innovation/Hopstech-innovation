@@ -28,6 +28,7 @@ import { sendProjectInquiryEmail } from "./emailService";
 import { privateBlobPut } from "./blobStorage";
 import { nanoid } from "nanoid";
 import { routeClientChatMessage } from "./chatRouter";
+import { fallbackRatesFromEur } from "../shared/quoteSimulation";
 
 export const clientPortalRouter = router({
   /**
@@ -35,6 +36,30 @@ export const clientPortalRouter = router({
    * PUBLIC ENDPOINTS
    * ========================================
    */
+
+  /** ECB-sourced FX via Frankfurter; falls back to static EUR rates */
+  getFxRates: publicProcedure.query(async () => {
+    const fallback = fallbackRatesFromEur();
+    // Frankfurter/ECB only covers a subset; regional codes keep fallback rates.
+    const frankfurterCodes = ["USD", "GBP", "CHF", "CAD", "AUD", "JPY", "INR", "SGD", "ZAR", "AED"];
+    try {
+      const url = `https://api.frankfurter.app/latest?from=EUR&to=${frankfurterCodes.join(",")}`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+      if (!res.ok) {
+        return { base: "EUR" as const, rates: fallback, source: "fallback" as const, asOf: null };
+      }
+      const data = (await res.json()) as { rates?: Record<string, number>; date?: string };
+      const rates = { ...fallback, ...(data.rates ?? {}), EUR: 1 };
+      return {
+        base: "EUR" as const,
+        rates,
+        source: "frankfurter" as const,
+        asOf: data.date ?? null,
+      };
+    } catch {
+      return { base: "EUR" as const, rates: fallback, source: "fallback" as const, asOf: null };
+    }
+  }),
 
   // Submit project inquiry (existing endpoint)
   submitInquiry: publicProcedure
@@ -46,6 +71,8 @@ export const clientPortalRouter = router({
         phone: z.string().optional(),
         projectType: z.string().min(1, "Project type is required"),
         budget: z.string().optional(),
+        budgetCurrency: z.string().optional(),
+        complexity: z.enum(["lean", "standard", "enterprise"]).optional(),
         timeline: z.string().optional(),
         description: z.string().min(10, "Description must be at least 10 characters"),
       })
@@ -61,6 +88,12 @@ export const clientPortalRouter = router({
                  'unknown';
       const userAgent = ctx.req?.headers?.['user-agent'] || 'unknown';
 
+      const simMeta = [
+        input.budgetCurrency ? `currency:${input.budgetCurrency}` : null,
+        input.complexity ? `complexity:${input.complexity}` : null,
+        "quote-simulation:indicative",
+      ].filter(Boolean) as string[];
+
       await db.insert(projectInquiries).values({
         name: input.name,
         email: input.email,
@@ -70,6 +103,7 @@ export const clientPortalRouter = router({
         budget: input.budget || null,
         timeline: input.timeline || null,
         description: input.description,
+        requirements: simMeta,
         status: "new",
         ip,
         userAgent,

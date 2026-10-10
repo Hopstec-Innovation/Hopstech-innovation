@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Rocket, CheckCircle2, Clock, TrendingUp, Mail, Building2, Phone, FileText, LogIn, Loader2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Rocket, CheckCircle2, Clock, TrendingUp, Mail, Building2, Phone, FileText, LogIn, Loader2, Calculator } from 'lucide-react';
 import PageLayout from '../components/PageLayout';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -14,22 +14,33 @@ import DashboardOverview from '../components/dashboard/DashboardOverview';
 import { FullScreenLoader } from '../components/ui/loading-spinner';
 import { COMPANY_NAME } from '@shared/const';
 import { accessRoleLabel, isInternalRole } from '@shared/roles';
+import {
+  COMPLEXITY_OPTIONS,
+  PROJECT_OFFERINGS,
+  SUPPORTED_CURRENCIES,
+  fallbackRatesFromEur,
+  simulateQuote,
+  type ComplexityTier,
+} from '@shared/quoteSimulation';
 import { useLocation } from 'wouter';
 import '../components/dashboard/portal.css';
+
+const emptyInquiryForm = {
+  name: '',
+  email: '',
+  company: '',
+  phone: '',
+  projectType: 'web-app',
+  budgetCurrency: 'EUR',
+  complexity: 'standard' as ComplexityTier,
+  timeline: '',
+  description: '',
+};
 
 const ClientPortalPage = () => {
   const { isAuthenticated, user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    company: '',
-    phone: '',
-    projectType: 'web-app',
-    budget: '',
-    timeline: '',
-    description: '',
-  });
+  const [formData, setFormData] = useState(emptyInquiryForm);
 
   const [magicLinkEmail, setMagicLinkEmail] = useState('');
   const [magicLinkName, setMagicLinkName] = useState('');
@@ -42,20 +53,28 @@ const ClientPortalPage = () => {
     }
   }, [authLoading, isAuthenticated, user, setLocation]);
 
+  const { data: fxData } = trpc.clientPortal.getFxRates.useQuery(undefined, {
+    staleTime: 1000 * 60 * 60,
+    refetchOnWindowFocus: false,
+  });
+
+  const ratesPerEur = fxData?.rates ?? fallbackRatesFromEur();
+
+  const quote = useMemo(
+    () =>
+      simulateQuote({
+        projectType: formData.projectType,
+        complexity: formData.complexity,
+        currencyCode: formData.budgetCurrency,
+        ratesPerEur,
+      }),
+    [formData.projectType, formData.complexity, formData.budgetCurrency, ratesPerEur]
+  );
 
   const inquiryMutation = trpc.clientPortal.submitInquiry.useMutation({
     onSuccess: () => {
       toast.success('Project inquiry submitted! Check your email for next steps.');
-      setFormData({
-        name: '',
-        email: '',
-        company: '',
-        phone: '',
-        projectType: 'web-app',
-        budget: '',
-        timeline: '',
-        description: '',
-      });
+      setFormData(emptyInquiryForm);
     },
     onError: (error) => {
       toast.error(error.message || 'Failed to submit inquiry. Please try again.');
@@ -78,11 +97,26 @@ const ClientPortalPage = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    inquiryMutation.mutate(formData);
+    inquiryMutation.mutate({
+      name: formData.name,
+      email: formData.email,
+      company: formData.company || undefined,
+      phone: formData.phone || undefined,
+      projectType: formData.projectType,
+      budget: quote.budgetSummary,
+      budgetCurrency: formData.budgetCurrency,
+      complexity: formData.complexity,
+      timeline: formData.timeline || undefined,
+      description: formData.description,
+    });
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: name === 'complexity' ? (value as ComplexityTier) : value,
+    }));
   };
 
   const handleMagicLinkSubmit = (e: React.FormEvent) => {
@@ -115,15 +149,6 @@ const ClientPortalPage = () => {
       title: 'Fast Response',
       description: 'Get quick responses and dedicated support throughout your project',
     },
-  ];
-
-  const projectTypes = [
-    { value: 'web-app', label: 'Web Application' },
-    { value: 'mobile-app', label: 'Mobile Application' },
-    { value: 'devops', label: 'DevOps & Infrastructure' },
-    { value: 'cloud-migration', label: 'Cloud Migration' },
-    { value: 'consulting', label: 'Technical Consulting' },
-    { value: 'other', label: 'Other' },
   ];
 
   // Loading state
@@ -442,7 +467,7 @@ const ClientPortalPage = () => {
                       </div>
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-2 md:col-span-2">
                       <Label htmlFor="projectType" className="text-white">
                         Project Type <span className="text-red-500">*</span>
                       </Label>
@@ -452,28 +477,58 @@ const ClientPortalPage = () => {
                         value={formData.projectType}
                         onChange={handleChange}
                         required
-                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--hopstec-teal)]"
                       >
-                        {projectTypes.map((type) => (
+                        {PROJECT_OFFERINGS.map((type) => (
                           <option key={type.value} value={type.value}>
                             {type.label}
                           </option>
                         ))}
                       </select>
+                      <p className="text-sm text-gray-500">
+                        {quote.offering.description}
+                      </p>
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="budget" className="text-white">
-                        Budget Range
+                      <Label htmlFor="complexity" className="text-white">
+                        Scope / Complexity
                       </Label>
-                      <Input
-                        id="budget"
-                        name="budget"
-                        value={formData.budget}
+                      <select
+                        id="complexity"
+                        name="complexity"
+                        value={formData.complexity}
                         onChange={handleChange}
-                        className="bg-slate-900 border-slate-700 text-white"
-                        placeholder="e.g., $10k - $50k"
-                      />
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--hopstec-teal)]"
+                      >
+                        {COMPLEXITY_OPTIONS.map((tier) => (
+                          <option key={tier.value} value={tier.value}>
+                            {tier.label}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-sm text-gray-500">
+                        {COMPLEXITY_OPTIONS.find((t) => t.value === formData.complexity)?.hint}
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="budgetCurrency" className="text-white">
+                        Preferred Currency
+                      </Label>
+                      <select
+                        id="budgetCurrency"
+                        name="budgetCurrency"
+                        value={formData.budgetCurrency}
+                        onChange={handleChange}
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--hopstec-teal)]"
+                      >
+                        {SUPPORTED_CURRENCIES.map((currency) => (
+                          <option key={currency.code} value={currency.code}>
+                            {currency.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
 
                     <div className="space-y-2 md:col-span-2">
@@ -489,6 +544,32 @@ const ClientPortalPage = () => {
                         placeholder="e.g., 3-6 months"
                       />
                     </div>
+                  </div>
+
+                  <div className="rounded-lg border border-[var(--hopstec-teal)]/30 bg-slate-900/70 p-5">
+                    <div className="mb-3 flex items-start gap-3">
+                      <Calculator className="mt-0.5 h-5 w-5 shrink-0 text-[var(--hopstec-teal)]" />
+                      <div>
+                        <p className="text-sm font-medium text-white">Quote simulation</p>
+                        <p className="text-sm text-gray-400">
+                          Live estimate for {quote.offering.label} — convert to the currency you budget in.
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-2xl font-semibold tracking-tight text-white md:text-3xl">
+                      {quote.rangeLocal}
+                    </p>
+                    {formData.budgetCurrency !== 'EUR' && (
+                      <p className="mt-1 text-sm text-gray-400">
+                        ≈ {quote.rangeEur} (EUR reference)
+                      </p>
+                    )}
+                    <p className="mt-3 text-xs leading-5 text-gray-500">
+                      {quote.disclaimer}
+                      {fxData?.source === 'frankfurter' && fxData.asOf
+                        ? ` FX as of ${fxData.asOf} (ECB via Frankfurter).`
+                        : ' Using reference FX rates when live conversion is unavailable.'}
+                    </p>
                   </div>
 
                   <div className="space-y-2">
