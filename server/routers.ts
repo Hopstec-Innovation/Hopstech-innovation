@@ -12,6 +12,7 @@ import { testEmailRouter } from "./testEmailRouter";
 import { liveRunRouter } from "./liveRunRouter";
 import { opsRouter } from "./opsRouter";
 import { chatRouter } from "./chatRouter";
+import { tempQuotationRouter } from "./tempQuotationRouter";
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -37,6 +38,7 @@ export const appRouter = router({
   liveRun: liveRunRouter,
   ops: opsRouter,
   chat: chatRouter,
+  tempQuotation: tempQuotationRouter,
 
   // Test router (remove in production)
   testEmail: testEmailRouter,
