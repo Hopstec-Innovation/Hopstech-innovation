@@ -22,25 +22,89 @@ export type SupportedCurrency = {
   fallbackPerEur: number;
 };
 
+export type QuoteAddon = {
+  id: string;
+  label: string;
+  hint: string;
+  /** Multiplier applied to both ends of the EUR range (e.g. 0.1 = +10%) */
+  uplift: number;
+};
+
 export const COMPLEXITY_OPTIONS: {
   value: ComplexityTier;
   label: string;
   hint: string;
+  /** Scope slider midpoint (0-100) */
+  scope: number;
 }[] = [
   {
     value: "lean",
     label: "Lean MVP",
     hint: "Focused scope, core features, shorter delivery",
+    scope: 15,
   },
   {
     value: "standard",
     label: "Standard",
     hint: "Full product slice with polish and integrations",
+    scope: 50,
   },
   {
     value: "enterprise",
     label: "Enterprise",
     hint: "Multi-team, compliance, scale, or complex ops",
+    scope: 85,
+  },
+];
+
+export const QUOTE_ADDONS: QuoteAddon[] = [
+  {
+    id: "auth",
+    label: "Auth / SSO",
+    hint: "Roles, magic links, SSO",
+    uplift: 0.08,
+  },
+  {
+    id: "payments",
+    label: "Payments",
+    hint: "Stripe, invoices, plans",
+    uplift: 0.1,
+  },
+  {
+    id: "realtime",
+    label: "Realtime",
+    hint: "Live updates, chat, sockets",
+    uplift: 0.12,
+  },
+  {
+    id: "ai",
+    label: "AI features",
+    hint: "LLM workflows, analysis",
+    uplift: 0.15,
+  },
+  {
+    id: "mobile",
+    label: "Mobile companion",
+    hint: "iOS / Android companion app",
+    uplift: 0.2,
+  },
+  {
+    id: "compliance",
+    label: "Compliance",
+    hint: "GDPR, audit trails, regulated data",
+    uplift: 0.18,
+  },
+  {
+    id: "i18n",
+    label: "Multi-language",
+    hint: "Localisation & locale UX",
+    uplift: 0.08,
+  },
+  {
+    id: "integrations",
+    label: "Integrations",
+    hint: "ERP, CRM, third-party APIs",
+    uplift: 0.12,
   },
 ];
 
@@ -232,49 +296,173 @@ export function formatMoney(amount: number, currencyCode: string, locale = "en-E
   }
 }
 
+export function scopeToComplexity(scope: number): ComplexityTier {
+  if (scope < 34) return "lean";
+  if (scope < 67) return "standard";
+  return "enterprise";
+}
+
+export function complexityLabelForScope(scope: number): string {
+  const tier = scopeToComplexity(scope);
+  return COMPLEXITY_OPTIONS.find((c) => c.value === tier)?.label ?? tier;
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+/** Continuous scope (0-100) blended across lean → standard → enterprise bands */
+export function rangeForScope(offering: ProjectOffering, scope: number): [number, number] {
+  const clamped = Math.min(100, Math.max(0, scope));
+  const [leanMin, leanMax] = offering.eurByComplexity.lean;
+  const [stdMin, stdMax] = offering.eurByComplexity.standard;
+  const [entMin, entMax] = offering.eurByComplexity.enterprise;
+
+  if (clamped <= 50) {
+    const t = clamped / 50;
+    return [Math.round(lerp(leanMin, stdMin, t)), Math.round(lerp(leanMax, stdMax, t))];
+  }
+  const t = (clamped - 50) / 50;
+  return [Math.round(lerp(stdMin, entMin, t)), Math.round(lerp(stdMax, entMax, t))];
+}
+
+/** Rush delivery costs more; long runway slightly lowers the floor pressure */
+export function timelineMultiplier(months: number): number {
+  if (months <= 2) return 1.18;
+  if (months <= 4) return 1.08;
+  if (months <= 8) return 1;
+  if (months <= 12) return 0.96;
+  return 0.92;
+}
+
+export function timelineLabel(months: number): string {
+  if (months <= 2) return "Rush delivery";
+  if (months <= 4) return "Accelerated";
+  if (months <= 8) return "Standard pace";
+  if (months <= 12) return "Relaxed";
+  return "Extended programme";
+}
+
+export type InteractiveQuoteInput = {
+  projectType: string;
+  /** 0-100 continuous scope */
+  scope: number;
+  /** Target delivery window in months */
+  timelineMonths: number;
+  addonIds: string[];
+  currencyCode: string;
+  ratesPerEur: Record<string, number>;
+};
+
+export type InteractiveQuoteResult = {
+  offering: ProjectOffering;
+  complexity: ComplexityTier;
+  complexityLabel: string;
+  currency: SupportedCurrency;
+  scope: number;
+  timelineMonths: number;
+  timelineLabel: string;
+  selectedAddons: QuoteAddon[];
+  addonUplift: number;
+  timelineMult: number;
+  minEur: number;
+  maxEur: number;
+  midEur: number;
+  minLocal: number;
+  maxLocal: number;
+  midLocal: number;
+  rangeLocal: string;
+  rangeEur: string;
+  midLocalLabel: string;
+  disclaimer: string;
+  budgetSummary: string;
+  breakdown: { label: string; detail: string }[];
+};
+
+export function simulateInteractiveQuote(input: InteractiveQuoteInput): InteractiveQuoteResult {
+  const offering = getOffering(input.projectType);
+  const complexity = scopeToComplexity(input.scope);
+  const complexityLabel = complexityLabelForScope(input.scope);
+  const [baseMin, baseMax] = rangeForScope(offering, input.scope);
+
+  const selectedAddons = QUOTE_ADDONS.filter((a) => input.addonIds.includes(a.id));
+  const addonUplift = selectedAddons.reduce((sum, a) => sum + a.uplift, 0);
+  const timelineMult = timelineMultiplier(input.timelineMonths);
+
+  const factor = (1 + addonUplift) * timelineMult;
+  const minEur = Math.round(baseMin * factor);
+  const maxEur = Math.round(baseMax * factor);
+  const midEur = Math.round((minEur + maxEur) / 2);
+
+  const currency = getCurrency(input.currencyCode);
+  const minLocal = convertFromEur(minEur, currency.code, input.ratesPerEur);
+  const maxLocal = convertFromEur(maxEur, currency.code, input.ratesPerEur);
+  const midLocal = convertFromEur(midEur, currency.code, input.ratesPerEur);
+
+  const rangeLocal = `${formatMoney(minLocal, currency.code)} – ${formatMoney(maxLocal, currency.code)}`;
+  const rangeEur = `${formatMoney(minEur, "EUR")} – ${formatMoney(maxEur, "EUR")}`;
+  const midLocalLabel = formatMoney(midLocal, currency.code);
+  const tl = timelineLabel(input.timelineMonths);
+
+  const breakdown = [
+    { label: "Base scope", detail: `${complexityLabel} · ${formatMoney(baseMin, "EUR")} – ${formatMoney(baseMax, "EUR")}` },
+    {
+      label: "Add-ons",
+      detail:
+        selectedAddons.length === 0
+          ? "None selected"
+          : `+${Math.round(addonUplift * 100)}% (${selectedAddons.map((a) => a.label).join(", ")})`,
+    },
+    {
+      label: "Timeline",
+      detail: `${input.timelineMonths} mo · ${tl} (×${timelineMult.toFixed(2)})`,
+    },
+  ];
+
+  return {
+    offering,
+    complexity,
+    complexityLabel,
+    currency,
+    scope: input.scope,
+    timelineMonths: input.timelineMonths,
+    timelineLabel: tl,
+    selectedAddons,
+    addonUplift,
+    timelineMult,
+    minEur,
+    maxEur,
+    midEur,
+    minLocal,
+    maxLocal,
+    midLocal,
+    rangeLocal,
+    rangeEur,
+    midLocalLabel,
+    disclaimer:
+      "Indicative estimate only - not a formal quotation. Final pricing follows SOW / RFQ review.",
+    budgetSummary:
+      currency.code === "EUR"
+        ? `${rangeLocal} · mid ${midLocalLabel} (${complexityLabel}, ${input.timelineMonths}mo · indicative)`
+        : `${rangeLocal} ≈ ${rangeEur} · mid ${midLocalLabel} (${complexityLabel}, ${input.timelineMonths}mo · indicative)`,
+    breakdown,
+  };
+}
+
+/** Legacy helper used by simpler callers */
 export function simulateQuote(input: {
   projectType: string;
   complexity: ComplexityTier;
   currencyCode: string;
   ratesPerEur: Record<string, number>;
-}): {
-  offering: ProjectOffering;
-  complexity: ComplexityTier;
-  currency: SupportedCurrency;
-  minEur: number;
-  maxEur: number;
-  minLocal: number;
-  maxLocal: number;
-  rangeLocal: string;
-  rangeEur: string;
-  disclaimer: string;
-  budgetSummary: string;
-} {
-  const offering = getOffering(input.projectType);
-  const [minEur, maxEur] = offering.eurByComplexity[input.complexity];
-  const currency = getCurrency(input.currencyCode);
-  const minLocal = convertFromEur(minEur, currency.code, input.ratesPerEur);
-  const maxLocal = convertFromEur(maxEur, currency.code, input.ratesPerEur);
-  const rangeLocal = `${formatMoney(minLocal, currency.code)} – ${formatMoney(maxLocal, currency.code)}`;
-  const rangeEur = `${formatMoney(minEur, "EUR")} – ${formatMoney(maxEur, "EUR")}`;
-  const complexityLabel =
-    COMPLEXITY_OPTIONS.find((c) => c.value === input.complexity)?.label ?? input.complexity;
-
-  return {
-    offering,
-    complexity: input.complexity,
-    currency,
-    minEur,
-    maxEur,
-    minLocal,
-    maxLocal,
-    rangeLocal,
-    rangeEur,
-    disclaimer:
-      "Indicative estimate only — not a formal quotation. Final pricing follows SOW / RFQ review.",
-    budgetSummary:
-      currency.code === "EUR"
-        ? `${rangeEur} (${complexityLabel} · indicative)`
-        : `${rangeLocal} ≈ ${rangeEur} (${complexityLabel} · indicative)`,
-  };
+}): InteractiveQuoteResult {
+  const scope = COMPLEXITY_OPTIONS.find((c) => c.value === input.complexity)?.scope ?? 50;
+  return simulateInteractiveQuote({
+    projectType: input.projectType,
+    scope,
+    timelineMonths: 6,
+    addonIds: [],
+    currencyCode: input.currencyCode,
+    ratesPerEur: input.ratesPerEur,
+  });
 }
