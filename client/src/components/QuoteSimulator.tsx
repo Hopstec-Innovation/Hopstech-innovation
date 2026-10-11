@@ -24,6 +24,9 @@ type QuoteSimulatorProps = {
   currencyCode: string;
   ratesPerEur: Record<string, number>;
   fxNote?: string;
+  /** Compact side-panel styling for dialogs */
+  variant?: "default" | "panel";
+  className?: string;
   client: {
     name: string;
     email: string;
@@ -81,11 +84,14 @@ export function QuoteSimulator({
   currencyCode,
   ratesPerEur,
   fxNote,
+  variant = "default",
+  className,
   client,
   onProjectTypeChange,
   onCurrencyChange,
   onQuoteChange,
 }: QuoteSimulatorProps) {
+  const panel = variant === "panel";
   const [scope, setScope] = useState(50);
   const [timelineMonths, setTimelineMonths] = useState(6);
   const [addonIds, setAddonIds] = useState<string[]>([]);
@@ -183,7 +189,13 @@ export function QuoteSimulator({
   const barWidth = Math.max(12, Math.min(92, scope * 0.7 + addonIds.length * 3));
 
   return (
-    <div className="space-y-5 rounded-xl border border-[var(--hopstec-teal)]/35 bg-gradient-to-br from-slate-900/90 via-slate-900/70 to-slate-950/90 p-5 md:p-6">
+    <div
+      className={cn(
+        "rounded-xl border border-[var(--hopstec-teal)]/35 bg-gradient-to-br from-slate-900/90 via-slate-900/70 to-slate-950/90",
+        panel ? "space-y-3 p-4" : "space-y-5 p-5 md:p-6",
+        className
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <div className="mt-0.5 rounded-md bg-[var(--hopstec-teal)]/15 p-2">
@@ -191,8 +203,10 @@ export function QuoteSimulator({
           </div>
           <div>
             <p className="text-sm font-medium text-white">Live quote simulator</p>
-            <p className="text-sm text-gray-400">
-              Market-calibrated ranges with live FX. Generate a temporary quotation to download or email.
+            <p className={cn("text-gray-400", panel ? "text-xs" : "text-sm")}>
+              {panel
+                ? "Adjust scope live — estimate updates instantly."
+                : "Market-calibrated ranges with live FX. Generate a temporary quotation to download or email."}
             </p>
           </div>
         </div>
@@ -206,8 +220,8 @@ export function QuoteSimulator({
         </button>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div className="space-y-2">
+      <div className={cn("grid grid-cols-1 gap-3", panel ? "sm:grid-cols-2" : "gap-4 md:grid-cols-2")}>
+        <div className="space-y-1.5">
           <Label htmlFor="sim-projectType" className="text-white">
             Project type
           </Label>
@@ -215,7 +229,7 @@ export function QuoteSimulator({
             id="sim-projectType"
             value={projectType}
             onChange={(e) => onProjectTypeChange(e.target.value)}
-            className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[var(--hopstec-teal)]"
+            className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[var(--hopstec-teal)]"
           >
             {PROJECT_OFFERINGS.map((type) => (
               <option key={type.value} value={type.value}>
@@ -223,10 +237,10 @@ export function QuoteSimulator({
               </option>
             ))}
           </select>
-          <p className="text-xs text-gray-500">{quote.offering.description}</p>
+          {!panel && <p className="text-xs text-gray-500">{quote.offering.description}</p>}
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <Label htmlFor="sim-currency" className="text-white">
             Currency
           </Label>
@@ -234,7 +248,7 @@ export function QuoteSimulator({
             id="sim-currency"
             value={currencyCode}
             onChange={(e) => onCurrencyChange(e.target.value)}
-            className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[var(--hopstec-teal)]"
+            className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[var(--hopstec-teal)]"
           >
             {SUPPORTED_CURRENCIES.map((currency) => (
               <option key={currency.code} value={currency.code}>
@@ -245,7 +259,7 @@ export function QuoteSimulator({
         </div>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         <div className="flex items-end justify-between gap-3">
           <div>
             <Label className="text-white">Scope intensity</Label>
@@ -253,7 +267,7 @@ export function QuoteSimulator({
               {complexityLabelForScope(scope)} · {Math.round(scope)}/100
             </p>
           </div>
-          <div className="flex gap-1">
+          <div className="flex flex-wrap justify-end gap-1">
             {COMPLEXITY_OPTIONS.map((tier) => (
               <button
                 key={tier.value}
@@ -281,7 +295,7 @@ export function QuoteSimulator({
         />
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         <div className="flex items-end justify-between">
           <div>
             <Label className="text-white">Delivery window</Label>
@@ -300,9 +314,9 @@ export function QuoteSimulator({
         />
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         <Label className="text-white">Capability add-ons</Label>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           {QUOTE_ADDONS.map((addon) => {
             const active = addonIds.includes(addon.id);
             return (
@@ -312,7 +326,7 @@ export function QuoteSimulator({
                 onClick={() => toggleAddon(addon.id)}
                 title={addon.hint}
                 className={cn(
-                  "rounded-full border px-3 py-1.5 text-xs transition",
+                  "rounded-full border px-2.5 py-1 text-[11px] transition",
                   active
                     ? "border-[var(--hopstec-teal)] bg-[var(--hopstec-teal)]/15 text-[var(--hopstec-teal)]"
                     : "border-white/10 bg-white/[0.03] text-gray-400 hover:border-white/20 hover:text-white"
@@ -331,23 +345,29 @@ export function QuoteSimulator({
         initial={{ opacity: 0.72, y: 4 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25 }}
-        className="rounded-lg border border-white/10 bg-slate-950/70 p-4"
+        className={cn("rounded-lg border border-white/10 bg-slate-950/70", panel ? "p-3" : "p-4")}
       >
         <p className="text-xs uppercase tracking-[0.14em] text-gray-500">Estimated range</p>
-        <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
           <AnimatedAmount
             value={quote.minLocal}
             currencyCode={currencyCode}
-            className="text-2xl font-semibold tracking-tight text-white md:text-3xl"
+            className={cn(
+              "font-semibold tracking-tight text-white",
+              panel ? "text-xl" : "text-2xl md:text-3xl"
+            )}
           />
-          <span className="text-xl text-gray-500 md:text-2xl">–</span>
+          <span className="text-lg text-gray-500">–</span>
           <AnimatedAmount
             value={quote.maxLocal}
             currencyCode={currencyCode}
-            className="text-2xl font-semibold tracking-tight text-white md:text-3xl"
+            className={cn(
+              "font-semibold tracking-tight text-white",
+              panel ? "text-xl" : "text-2xl md:text-3xl"
+            )}
           />
         </div>
-        <p className="mt-1 text-sm text-gray-400">
+        <p className="mt-1 text-xs text-gray-400">
           Midpoint{" "}
           <AnimatedAmount
             value={quote.midLocal}
@@ -357,7 +377,7 @@ export function QuoteSimulator({
           {currencyCode !== "EUR" && <span className="text-gray-500"> · ≈ {quote.rangeEur}</span>}
         </p>
 
-        <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-800">
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-800">
           <motion.div
             className="h-full rounded-full bg-[var(--hopstec-teal)]"
             initial={false}
@@ -366,40 +386,53 @@ export function QuoteSimulator({
           />
         </div>
 
-        <div className="mt-4 rounded-md border border-white/10 bg-white/[0.03] p-3">
+        <div className="mt-3 rounded-md border border-white/10 bg-white/[0.03] p-2.5">
           <p className="text-xs font-medium text-white">Market comparison</p>
           <p className="mt-1 text-xs text-gray-400">{quote.market.positionLabel}</p>
-          <p className="mt-2 text-xs text-gray-500">
-            Mid-market EU boutique:{" "}
-            {formatMoney(quote.market.band.midEur[0], "EUR")} –{" "}
+          <p className="mt-1 text-[11px] text-gray-500">
+            Mid-market: {formatMoney(quote.market.band.midEur[0], "EUR")} –{" "}
             {formatMoney(quote.market.band.midEur[1], "EUR")}
           </p>
-          <p className="mt-1 text-[11px] leading-4 text-gray-600">{quote.market.band.notes}</p>
+          {!panel && (
+            <p className="mt-1 text-[11px] leading-4 text-gray-600">{quote.market.band.notes}</p>
+          )}
         </div>
 
-        <ul className="mt-4 space-y-1.5 text-xs text-gray-500">
-          {quote.breakdown.map((row) => (
-            <li key={row.label} className="flex justify-between gap-3">
-              <span className="text-gray-400">{row.label}</span>
-              <span className="text-right text-gray-500">{row.detail}</span>
-            </li>
-          ))}
-        </ul>
+        {!panel && (
+          <ul className="mt-4 space-y-1.5 text-xs text-gray-500">
+            {quote.breakdown.map((row) => (
+              <li key={row.label} className="flex justify-between gap-3">
+                <span className="text-gray-400">{row.label}</span>
+                <span className="text-right text-gray-500">{row.detail}</span>
+              </li>
+            ))}
+          </ul>
+        )}
 
-        <p className="mt-3 text-xs leading-5 text-gray-500">
-          {quote.disclaimer}
+        <p className="mt-2 text-[11px] leading-4 text-gray-500">
+          {panel
+            ? "Temporary estimate — subject to Hopstec verification & approval."
+            : quote.disclaimer}
           {fxNote ? ` ${fxNote}` : ""}
         </p>
       </motion.div>
 
-      <div className="space-y-3 rounded-lg border border-amber-400/25 bg-amber-400/5 p-4">
+      <div
+        className={cn(
+          "rounded-lg border border-amber-400/25 bg-amber-400/5",
+          panel ? "space-y-2 p-3" : "space-y-3 p-4"
+        )}
+      >
         <div className="flex items-start gap-2">
-          <FileBadge2 className="mt-0.5 h-4 w-4 text-amber-300" />
+          <FileBadge2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
           <div>
             <p className="text-sm font-medium text-amber-100">Temporary quotation</p>
-            <p className="text-xs text-amber-100/70">
-              Branded PDF with Hopstec legal notice. Subject to verification and approval — not a binding offer.
-            </p>
+            {!panel && (
+              <p className="text-xs text-amber-100/70">
+                Branded PDF with Hopstec legal notice. Subject to verification and approval — not a
+                binding offer.
+              </p>
+            )}
           </div>
         </div>
 
@@ -409,9 +442,10 @@ export function QuoteSimulator({
           </p>
         )}
 
-        <div className="flex flex-col gap-2 sm:flex-row">
+        <div className={cn("flex gap-2", panel ? "flex-wrap" : "flex-col sm:flex-row")}>
           <Button
             type="button"
+            size={panel ? "sm" : "default"}
             onClick={generate}
             disabled={createMutation.isPending}
             className="bg-[var(--hopstec-teal)] text-slate-950 hover:bg-[var(--hopstec-teal)]/90"
@@ -421,10 +455,11 @@ export function QuoteSimulator({
             ) : (
               <FileBadge2 className="mr-2 h-4 w-4" />
             )}
-            Generate temporary quotation
+            {panel ? "Generate PDF quote" : "Generate temporary quotation"}
           </Button>
           <Button
             type="button"
+            size={panel ? "sm" : "default"}
             variant="outline"
             disabled={!publicId || pdfMutation.isPending}
             onClick={() => publicId && pdfMutation.mutate({ publicId })}
@@ -435,10 +470,11 @@ export function QuoteSimulator({
             ) : (
               <Download className="mr-2 h-4 w-4" />
             )}
-            Download PDF
+            Download
           </Button>
           <Button
             type="button"
+            size={panel ? "sm" : "default"}
             variant="outline"
             disabled={!publicId || emailMutation.isPending}
             onClick={() => publicId && emailMutation.mutate({ publicId })}
@@ -449,7 +485,7 @@ export function QuoteSimulator({
             ) : (
               <Mail className="mr-2 h-4 w-4" />
             )}
-            Email to me
+            Email
           </Button>
         </div>
       </div>

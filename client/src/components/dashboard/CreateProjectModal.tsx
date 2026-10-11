@@ -152,7 +152,6 @@ const CreateProjectModal = ({ open, onOpenChange }: CreateProjectModalProps) => 
       description: `${description.trim()}${simNotes}`,
       projectType: offering.label,
       priority,
-      // Store midpoint in cents (currency noted in simulation summary)
       budget: Math.round(liveQuote.midLocal * 100),
       technologies: liveQuote.selectedAddons.map((a) => a.label),
       documents: encodedDocuments,
@@ -161,166 +160,179 @@ const CreateProjectModal = ({ open, onOpenChange }: CreateProjectModalProps) => 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto border-slate-800 bg-slate-900 text-white">
-        <DialogHeader>
-          <DialogTitle className="text-2xl">Request a quotation</DialogTitle>
-          <DialogDescription className="text-gray-400">
-            Size the engagement with the live simulator, attach your SOW / RFQ, then send it into the
-            Hopstec intake queue. Generated estimates are temporary until we verify and approve.
+      <DialogContent className="flex h-[min(900px,92vh)] w-full max-w-[calc(100%-1.5rem)] flex-col gap-0 overflow-hidden border-slate-800 bg-slate-900 p-0 text-white sm:max-w-6xl">
+        <DialogHeader className="shrink-0 border-b border-white/10 px-5 py-4 pr-12 text-left md:px-6">
+          <DialogTitle className="text-xl md:text-2xl">Request a quotation</DialogTitle>
+          <DialogDescription className="text-sm text-gray-400">
+            Brief on the left, live simulator on the right — both stay in view.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="mt-4 space-y-6">
-          <div>
-            <Label htmlFor="title" className="text-white">
-              Project Title <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              id="title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g., E-commerce Website Redesign"
-              className="mt-2 border-slate-700 bg-slate-800 text-white"
-              required
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="description" className="text-white">
-              Description <span className="text-red-500">*</span>
-            </Label>
-            <Textarea
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe your project goals, requirements, and expected outcomes..."
-              className="mt-2 min-h-[100px] border-slate-700 bg-slate-800 text-white"
-              required
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="priority" className="text-white">
-              Priority
-            </Label>
-            <Select
-              value={priority}
-              onValueChange={(value: "low" | "medium" | "high" | "urgent") => setPriority(value)}
-            >
-              <SelectTrigger className="mt-2 border-slate-700 bg-slate-800 text-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="border-slate-700 bg-slate-800">
-                <SelectItem value="low" className="text-white hover:bg-slate-700">
-                  Low
-                </SelectItem>
-                <SelectItem value="medium" className="text-white hover:bg-slate-700">
-                  Medium
-                </SelectItem>
-                <SelectItem value="high" className="text-white hover:bg-slate-700">
-                  High
-                </SelectItem>
-                <SelectItem value="urgent" className="text-white hover:bg-slate-700">
-                  Urgent
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <QuoteSimulator
-            projectType={projectTypeValue}
-            currencyCode={currencyCode}
-            ratesPerEur={ratesPerEur}
-            fxNote={
-              fxData?.source === "frankfurter" && fxData.asOf
-                ? `FX as of ${fxData.asOf} (ECB via Frankfurter).`
-                : "Using reference FX rates when live conversion is unavailable."
-            }
-            client={{
-              name: user?.name || "",
-              email: user?.email || "",
-              description,
-            }}
-            onProjectTypeChange={setProjectTypeValue}
-            onCurrencyChange={setCurrencyCode}
-            onQuoteChange={handleQuoteChange}
-          />
-
-          <div>
-            <Label className="text-white">SOW / RFQ documents</Label>
-            <label className="mt-2 flex cursor-pointer flex-col items-center rounded-xl border border-dashed border-emerald-300/25 bg-emerald-300/[.04] p-6 text-center hover:border-emerald-300/50">
-              <UploadCloud className="mb-2 text-emerald-300" />
-              <span className="text-sm font-medium text-white">Choose files</span>
-              <span className="mt-1 text-xs text-slate-500">
-                PDF, Word, Excel, PNG or JPEG · 7 MB each · up to 5
-              </span>
-              <input
-                className="sr-only"
-                type="file"
-                multiple
-                accept=".pdf,.docx,.xlsx,.png,.jpg,.jpeg"
-                onChange={(event) => {
-                  const next = Array.from(event.target.files || []);
-                  if (next.some((file) => file.size > 7 * 1024 * 1024)) {
-                    return toast.error("Each document must be smaller than 7 MB");
-                  }
-                  setDocuments(next.slice(0, 5));
-                }}
-              />
-            </label>
-            {documents.length > 0 && (
-              <div className="mt-3 space-y-2">
-                {documents.map((file) => (
-                  <div
-                    key={file.name}
-                    className="flex items-center justify-between rounded-lg border border-white/10 px-3 py-2 text-sm"
-                  >
-                    <span className="flex min-w-0 items-center gap-2 text-slate-300">
-                      <FileText size={15} />
-                      <span className="truncate">{file.name}</span>
-                    </span>
-                    <button
-                      type="button"
-                      aria-label={`Remove ${file.name}`}
-                      onClick={() =>
-                        setDocuments((items) => items.filter((item) => item !== file))
-                      }
-                    >
-                      <X size={15} />
-                    </button>
-                  </div>
-                ))}
+        <form
+          onSubmit={handleSubmit}
+          className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-2"
+        >
+          {/* Left: project brief */}
+          <div className="flex min-h-0 flex-col border-white/10 lg:border-r">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4 md:px-6">
+              <div>
+                <Label htmlFor="title" className="text-white">
+                  Project Title <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g., E-commerce Website Redesign"
+                  className="mt-1.5 border-slate-700 bg-slate-800 text-white"
+                  required
+                />
               </div>
-            )}
+
+              <div>
+                <Label htmlFor="description" className="text-white">
+                  Description <span className="text-red-500">*</span>
+                </Label>
+                <Textarea
+                  id="description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Describe your project goals, requirements, and expected outcomes..."
+                  className="mt-1.5 min-h-[88px] border-slate-700 bg-slate-800 text-white"
+                  required
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="priority" className="text-white">
+                  Priority
+                </Label>
+                <Select
+                  value={priority}
+                  onValueChange={(value: "low" | "medium" | "high" | "urgent") =>
+                    setPriority(value)
+                  }
+                >
+                  <SelectTrigger className="mt-1.5 border-slate-700 bg-slate-800 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="border-slate-700 bg-slate-800">
+                    <SelectItem value="low" className="text-white hover:bg-slate-700">
+                      Low
+                    </SelectItem>
+                    <SelectItem value="medium" className="text-white hover:bg-slate-700">
+                      Medium
+                    </SelectItem>
+                    <SelectItem value="high" className="text-white hover:bg-slate-700">
+                      High
+                    </SelectItem>
+                    <SelectItem value="urgent" className="text-white hover:bg-slate-700">
+                      Urgent
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label className="text-white">SOW / RFQ documents</Label>
+                <label className="mt-1.5 flex cursor-pointer flex-col items-center rounded-xl border border-dashed border-emerald-300/25 bg-emerald-300/[.04] px-4 py-4 text-center hover:border-emerald-300/50">
+                  <UploadCloud className="mb-1.5 h-5 w-5 text-emerald-300" />
+                  <span className="text-sm font-medium text-white">Choose files</span>
+                  <span className="mt-0.5 text-xs text-slate-500">
+                    PDF, Word, Excel, PNG/JPEG · 7 MB · up to 5
+                  </span>
+                  <input
+                    className="sr-only"
+                    type="file"
+                    multiple
+                    accept=".pdf,.docx,.xlsx,.png,.jpg,.jpeg"
+                    onChange={(event) => {
+                      const next = Array.from(event.target.files || []);
+                      if (next.some((file) => file.size > 7 * 1024 * 1024)) {
+                        return toast.error("Each document must be smaller than 7 MB");
+                      }
+                      setDocuments(next.slice(0, 5));
+                    }}
+                  />
+                </label>
+                {documents.length > 0 && (
+                  <div className="mt-2 space-y-1.5">
+                    {documents.map((file) => (
+                      <div
+                        key={file.name}
+                        className="flex items-center justify-between rounded-lg border border-white/10 px-3 py-1.5 text-sm"
+                      >
+                        <span className="flex min-w-0 items-center gap-2 text-slate-300">
+                          <FileText size={14} />
+                          <span className="truncate">{file.name}</span>
+                        </span>
+                        <button
+                          type="button"
+                          aria-label={`Remove ${file.name}`}
+                          onClick={() =>
+                            setDocuments((items) => items.filter((item) => item !== file))
+                          }
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="shrink-0 flex justify-end gap-3 border-t border-white/10 bg-slate-950/40 px-5 py-3 md:px-6">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  resetForm();
+                  onOpenChange(false);
+                }}
+                className="border-slate-700 text-gray-400 hover:bg-slate-800"
+                disabled={createMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="bg-[var(--hopstec-teal)] text-slate-950 hover:bg-[var(--hopstec-teal)]/90"
+                disabled={createMutation.isPending}
+              >
+                {createMutation.isPending ? (
+                  <>
+                    <ButtonSpinner className="mr-2" />
+                    Sending…
+                  </>
+                ) : (
+                  "Send quotation request"
+                )}
+              </Button>
+            </div>
           </div>
 
-          <div className="flex justify-end gap-3 border-t border-slate-800 pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                resetForm();
-                onOpenChange(false);
+          {/* Right: live simulator */}
+          <div className="min-h-0 overflow-y-auto bg-slate-950/30 px-4 py-4 md:px-5">
+            <QuoteSimulator
+              variant="panel"
+              projectType={projectTypeValue}
+              currencyCode={currencyCode}
+              ratesPerEur={ratesPerEur}
+              fxNote={
+                fxData?.source === "frankfurter" && fxData.asOf
+                  ? `FX as of ${fxData.asOf} (ECB via Frankfurter).`
+                  : "Using reference FX rates when live conversion is unavailable."
+              }
+              client={{
+                name: user?.name || "",
+                email: user?.email || "",
+                description,
               }}
-              className="border-slate-700 text-gray-400 hover:bg-slate-800"
-              disabled={createMutation.isPending}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              className="bg-[var(--hopstec-teal)] text-slate-950 hover:bg-[var(--hopstec-teal)]/90"
-              disabled={createMutation.isPending}
-            >
-              {createMutation.isPending ? (
-                <>
-                  <ButtonSpinner className="mr-2" />
-                  Sending request...
-                </>
-              ) : (
-                "Send quotation request"
-              )}
-            </Button>
+              onProjectTypeChange={setProjectTypeValue}
+              onCurrencyChange={setCurrencyCode}
+              onQuoteChange={handleQuoteChange}
+            />
           </div>
         </form>
       </DialogContent>
