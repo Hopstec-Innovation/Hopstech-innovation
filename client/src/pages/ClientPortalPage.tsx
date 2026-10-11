@@ -16,6 +16,7 @@ import { FullScreenLoader } from '../components/ui/loading-spinner';
 import { COMPANY_NAME } from '@shared/const';
 import { accessRoleLabel, isInternalRole } from '@shared/roles';
 import {
+  DEFAULT_PROJECT_TYPE,
   fallbackRatesFromEur,
   type InteractiveQuoteResult,
 } from '@shared/quoteSimulation';
@@ -27,7 +28,7 @@ const emptyInquiryForm = {
   email: '',
   company: '',
   phone: '',
-  projectType: 'web-app',
+  projectType: DEFAULT_PROJECT_TYPE,
   budgetCurrency: 'EUR',
   description: '',
 };

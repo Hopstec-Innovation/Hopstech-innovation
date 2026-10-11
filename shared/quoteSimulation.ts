@@ -1,7 +1,7 @@
 /**
  * Indicative quote simulation for the public project inquiry form.
- * Ranges are EUR (Hopstec is Paris-based), calibrated against 2025–2026
- * Western EU boutique market guides — not a binding quotation.
+ * Mixed ladder: Africa-friendly / FR starter entry + Paris boutique engineering.
+ * Not a binding quotation.
  */
 
 import {
@@ -12,12 +12,16 @@ import {
 } from "./marketBenchmarks";
 
 export type ComplexityTier = "lean" | "standard" | "enterprise";
+export type OfferingTrack = "starter" | "foundation" | "engineering";
 
 export type ProjectOffering = {
   value: string;
   label: string;
   description: string;
-  /** Base EUR ranges by complexity [min, max] — Paris boutique positioning */
+  track: OfferingTrack;
+  /** Short line shown under the type when selected */
+  positioning: string;
+  /** Base EUR ranges by complexity [min, max] */
   eurByComplexity: Record<ComplexityTier, [number, number]>;
 };
 
@@ -33,6 +37,17 @@ export type QuoteAddon = {
   label: string;
   hint: string;
   uplift: number;
+  /** Which tracks this addon is relevant for */
+  tracks: OfferingTrack[];
+};
+
+export type EngagementSituation = {
+  id: string;
+  label: string;
+  hint: string;
+  defaultType: string;
+  defaultScope: number;
+  defaultMonths: number;
 };
 
 export const COMPLEXITY_OPTIONS: {
@@ -61,35 +76,258 @@ export const COMPLEXITY_OPTIONS: {
   },
 ];
 
-export const QUOTE_ADDONS: QuoteAddon[] = [
-  { id: "auth", label: "Auth / SSO", hint: "Roles, magic links, SSO", uplift: 0.08 },
-  { id: "payments", label: "Payments", hint: "Stripe, invoices, plans", uplift: 0.1 },
-  { id: "realtime", label: "Realtime", hint: "Live updates, chat, sockets", uplift: 0.12 },
-  { id: "ai", label: "AI features", hint: "LLM workflows, analysis", uplift: 0.15 },
-  { id: "mobile", label: "Mobile companion", hint: "iOS / Android companion app", uplift: 0.2 },
-  { id: "compliance", label: "Compliance", hint: "GDPR, audit trails, regulated data", uplift: 0.18 },
-  { id: "i18n", label: "Multi-language", hint: "Localisation & locale UX", uplift: 0.08 },
-  { id: "integrations", label: "Integrations", hint: "ERP, CRM, third-party APIs", uplift: 0.12 },
+/** First-click ladder so clients are not dropped into SaaS pricing */
+export const ENGAGEMENT_SITUATIONS: EngagementSituation[] = [
+  {
+    id: "tight-budget",
+    label: "Tight budget",
+    hint: "Website, landing, or a clear first step",
+    defaultType: "static-website",
+    defaultScope: 20,
+    defaultMonths: 1,
+  },
+  {
+    id: "design-first",
+    label: "Design first",
+    hint: "Mockups, UX, brand before build",
+    defaultType: "design-mockups",
+    defaultScope: 30,
+    defaultMonths: 1,
+  },
+  {
+    id: "building-product",
+    label: "Building a product",
+    hint: "Real app with users, data, and growth path",
+    defaultType: "web-app",
+    defaultScope: 45,
+    defaultMonths: 4,
+  },
+  {
+    id: "serious-engineering",
+    label: "Serious engineering",
+    hint: "SaaS, regulated, IoT — beyond vibe-coded prototypes",
+    defaultType: "saas-platform",
+    defaultScope: 60,
+    defaultMonths: 6,
+  },
 ];
 
-/** Calibrated to Western EU / Paris boutique mid-market (excl. VAT) */
+export const QUOTE_ADDONS: QuoteAddon[] = [
+  {
+    id: "cms",
+    label: "CMS editing",
+    hint: "Client-editable pages",
+    uplift: 0.12,
+    tracks: ["starter", "foundation"],
+  },
+  {
+    id: "forms",
+    label: "Forms & leads",
+    hint: "Contact, CRM capture",
+    uplift: 0.08,
+    tracks: ["starter", "foundation"],
+  },
+  {
+    id: "seo",
+    label: "SEO basics",
+    hint: "Meta, sitemap, performance",
+    uplift: 0.06,
+    tracks: ["starter", "foundation"],
+  },
+  {
+    id: "analytics",
+    label: "Analytics",
+    hint: "Privacy-aware tracking",
+    uplift: 0.05,
+    tracks: ["starter", "foundation", "engineering"],
+  },
+  {
+    id: "light-backend",
+    label: "Light backend",
+    hint: "API, admin, simple DB",
+    uplift: 0.22,
+    tracks: ["starter", "foundation"],
+  },
+  {
+    id: "auth",
+    label: "Auth / SSO",
+    hint: "Roles, magic links, SSO",
+    uplift: 0.08,
+    tracks: ["foundation", "engineering"],
+  },
+  {
+    id: "payments",
+    label: "Payments",
+    hint: "Stripe, invoices, plans",
+    uplift: 0.1,
+    tracks: ["foundation", "engineering"],
+  },
+  {
+    id: "realtime",
+    label: "Realtime",
+    hint: "Live updates, chat, sockets",
+    uplift: 0.12,
+    tracks: ["engineering"],
+  },
+  {
+    id: "ai",
+    label: "AI features",
+    hint: "LLM workflows, analysis",
+    uplift: 0.15,
+    tracks: ["foundation", "engineering"],
+  },
+  {
+    id: "mobile",
+    label: "Mobile companion",
+    hint: "iOS / Android companion app",
+    uplift: 0.2,
+    tracks: ["engineering"],
+  },
+  {
+    id: "compliance",
+    label: "Compliance",
+    hint: "GDPR, audit trails, regulated data",
+    uplift: 0.18,
+    tracks: ["engineering"],
+  },
+  {
+    id: "i18n",
+    label: "Multi-language",
+    hint: "Localisation & locale UX",
+    uplift: 0.08,
+    tracks: ["starter", "foundation", "engineering"],
+  },
+  {
+    id: "integrations",
+    label: "Integrations",
+    hint: "ERP, CRM, third-party APIs",
+    uplift: 0.12,
+    tracks: ["foundation", "engineering"],
+  },
+];
+
+/**
+ * Ladder: starter (Africa-friendly + FR entry) → foundation → engineering (Paris boutique).
+ * Amounts excl. VAT.
+ */
 export const PROJECT_OFFERINGS: ProjectOffering[] = [
+  {
+    value: "landing-page",
+    label: "Landing page",
+    description: "One high-converting page for a launch, campaign, or product waitlist",
+    track: "starter",
+    positioning: "Fast, affordable presence — ideal when budget is tight.",
+    eurByComplexity: {
+      lean: [400, 1200],
+      standard: [1200, 2800],
+      enterprise: [2800, 5500],
+    },
+  },
+  {
+    value: "static-website",
+    label: "Static website",
+    description: "Multi-page brochure / company site without a heavy backend",
+    track: "starter",
+    positioning: "Professional craft at an accessible price — room to grow later.",
+    eurByComplexity: {
+      lean: [700, 2000],
+      standard: [2000, 4500],
+      enterprise: [4500, 9000],
+    },
+  },
+  {
+    value: "design-mockups",
+    label: "UI mockups & visual design",
+    description: "High-fidelity screens and visual system before engineering starts",
+    track: "starter",
+    positioning: "Design-first so you validate the product before writing production code.",
+    eurByComplexity: {
+      lean: [500, 1500],
+      standard: [1500, 4000],
+      enterprise: [4000, 8000],
+    },
+  },
+  {
+    value: "ux-wireframes",
+    label: "UX wireframes & flows",
+    description: "User journeys, low/mid-fi wireframes, and interaction maps",
+    track: "starter",
+    positioning: "Clarify the product experience before expensive build cycles.",
+    eurByComplexity: {
+      lean: [600, 1800],
+      standard: [1800, 4500],
+      enterprise: [4500, 9000],
+    },
+  },
+  {
+    value: "brand-kit",
+    label: "Brand kit",
+    description: "Logo refinement, colours, type, and basic brand guidelines",
+    track: "starter",
+    positioning: "A coherent identity for web, pitch decks, and product UI.",
+    eurByComplexity: {
+      lean: [350, 900],
+      standard: [900, 2200],
+      enterprise: [2200, 4500],
+    },
+  },
+  {
+    value: "cms-website",
+    label: "CMS website",
+    description: "Editable marketing site (content you can update yourselves)",
+    track: "foundation",
+    positioning: "More than a static site — still lighter than a custom product.",
+    eurByComplexity: {
+      lean: [2000, 5000],
+      standard: [5000, 12000],
+      enterprise: [12000, 24000],
+    },
+  },
+  {
+    value: "light-backend",
+    label: "Light backend & admin",
+    description: "Simple API, database, and admin for forms, content, or ops",
+    track: "foundation",
+    positioning: "The bridge from vibe prototypes to something your team can operate.",
+    eurByComplexity: {
+      lean: [2500, 6000],
+      standard: [6000, 14000],
+      enterprise: [14000, 28000],
+    },
+  },
   {
     value: "web-app",
     label: "Custom Web Application",
     description: "Client portals, dashboards, and full-stack web products",
+    track: "engineering",
+    positioning:
+      "Production engineering — security, data model, and longevity beyond vibe-coded demos.",
     eurByComplexity: {
-      lean: [12000, 28000],
+      lean: [8000, 20000],
       standard: [25000, 65000],
       enterprise: [65000, 160000],
+    },
+  },
+  {
+    value: "saas-platform",
+    label: "SaaS / multi-tenant platform",
+    description: "Subscriptions, roles, tenancy, billing, and scalable product architecture",
+    track: "engineering",
+    positioning: "Serious product work Lovable-style tools rarely harden for production.",
+    eurByComplexity: {
+      lean: [20000, 45000],
+      standard: [45000, 110000],
+      enterprise: [110000, 250000],
     },
   },
   {
     value: "mobile-app",
     label: "Mobile Application",
     description: "iOS, Android, or cross-platform consumer/business apps",
+    track: "engineering",
+    positioning: "Store-ready mobile with real backend contracts and release discipline.",
     eurByComplexity: {
-      lean: [18000, 35000],
+      lean: [14000, 30000],
       standard: [35000, 80000],
       enterprise: [80000, 180000],
     },
@@ -98,9 +336,11 @@ export const PROJECT_OFFERINGS: ProjectOffering[] = [
     value: "devops",
     label: "DevOps & Infrastructure",
     description: "CI/CD, containers, cloud ops, and delivery pipelines",
+    track: "engineering",
+    positioning: "The operating system behind reliable shipping — hard to fake with prompts.",
     eurByComplexity: {
-      lean: [8000, 20000],
-      standard: [20000, 45000],
+      lean: [6000, 16000],
+      standard: [18000, 45000],
       enterprise: [45000, 110000],
     },
   },
@@ -108,8 +348,10 @@ export const PROJECT_OFFERINGS: ProjectOffering[] = [
     value: "automation",
     label: "Automation & Internal Tooling",
     description: "Workflows, ops dashboards, and process automation",
+    track: "engineering",
+    positioning: "Replace spreadsheet chaos with systems your ops team can trust.",
     eurByComplexity: {
-      lean: [8000, 20000],
+      lean: [6000, 16000],
       standard: [18000, 45000],
       enterprise: [45000, 100000],
     },
@@ -118,8 +360,10 @@ export const PROJECT_OFFERINGS: ProjectOffering[] = [
     value: "cloud-migration",
     label: "Cloud Migration & Architecture",
     description: "AWS, GCP, Azure design, migration, and optimisation",
+    track: "engineering",
+    positioning: "Architecture decisions that compound — good or bad — for years.",
     eurByComplexity: {
-      lean: [12000, 30000],
+      lean: [10000, 25000],
       standard: [30000, 70000],
       enterprise: [70000, 160000],
     },
@@ -128,8 +372,10 @@ export const PROJECT_OFFERINGS: ProjectOffering[] = [
     value: "healthtech",
     label: "HealthTech & Regulated Systems",
     description: "GDPR-aware health products, RPPS, clinical data flows",
+    track: "engineering",
+    positioning: "Regulated data and trust — not a vibe-coding weekend project.",
     eurByComplexity: {
-      lean: [25000, 50000],
+      lean: [22000, 45000],
       standard: [50000, 110000],
       enterprise: [110000, 220000],
     },
@@ -138,8 +384,10 @@ export const PROJECT_OFFERINGS: ProjectOffering[] = [
     value: "iot",
     label: "IoT & Connected Devices",
     description: "Firmware, MQTT, device fleets, and live monitoring",
+    track: "engineering",
+    positioning: "Hardware + cloud + reliability — serious systems engineering.",
     eurByComplexity: {
-      lean: [18000, 40000],
+      lean: [15000, 35000],
       standard: [40000, 90000],
       enterprise: [90000, 200000],
     },
@@ -148,8 +396,10 @@ export const PROJECT_OFFERINGS: ProjectOffering[] = [
     value: "ai-integration",
     label: "AI Integration",
     description: "LLM features, analysis pipelines, and recommendations",
+    track: "engineering",
+    positioning: "AI where it removes friction — with evals, cost control, and guardrails.",
     eurByComplexity: {
-      lean: [12000, 30000],
+      lean: [8000, 22000],
       standard: [30000, 70000],
       enterprise: [70000, 160000],
     },
@@ -158,18 +408,22 @@ export const PROJECT_OFFERINGS: ProjectOffering[] = [
     value: "api",
     label: "API Development & Integrations",
     description: "REST/GraphQL APIs and third-party system glue",
+    track: "foundation",
+    positioning: "Clean contracts between systems — the glue vibe tools often skip.",
     eurByComplexity: {
-      lean: [6000, 15000],
-      standard: [15000, 35000],
-      enterprise: [35000, 85000],
+      lean: [3500, 10000],
+      standard: [12000, 30000],
+      enterprise: [30000, 80000],
     },
   },
   {
     value: "ecommerce",
     label: "E-commerce & Marketplace",
     description: "Stores, payments, catalogues, and marketplace flows",
+    track: "engineering",
+    positioning: "Checkout, catalogue, and ops that must not break under load.",
     eurByComplexity: {
-      lean: [15000, 35000],
+      lean: [10000, 28000],
       standard: [35000, 80000],
       enterprise: [80000, 200000],
     },
@@ -178,33 +432,53 @@ export const PROJECT_OFFERINGS: ProjectOffering[] = [
     value: "consulting",
     label: "Technical Consulting & Strategy",
     description: "Architecture reviews, roadmap, and delivery planning",
+    track: "foundation",
+    positioning: "Clarity before spend — especially useful after a vibe-coded prototype.",
     eurByComplexity: {
-      lean: [2000, 6000],
-      standard: [6000, 18000],
-      enterprise: [18000, 45000],
+      lean: [800, 2500],
+      standard: [2500, 10000],
+      enterprise: [10000, 30000],
     },
   },
   {
     value: "maintenance",
     label: "Maintenance & Support",
     description: "Ongoing care, upgrades, and production support",
+    track: "foundation",
+    positioning: "Keep what you have healthy while you plan the next phase.",
     eurByComplexity: {
-      lean: [1000, 3000],
-      standard: [3000, 9000],
-      enterprise: [9000, 24000],
+      lean: [400, 1500],
+      standard: [1500, 6000],
+      enterprise: [6000, 18000],
     },
   },
   {
     value: "other",
     label: "Other / Not sure yet",
     description: "Describe the problem - we will map the right engagement",
+    track: "foundation",
+    positioning: "Start here if you are unsure — we will place you on the right rung.",
     eurByComplexity: {
-      lean: [8000, 22000],
-      standard: [22000, 60000],
-      enterprise: [60000, 140000],
+      lean: [800, 4000],
+      standard: [4000, 20000],
+      enterprise: [20000, 80000],
     },
   },
 ];
+
+export const DEFAULT_PROJECT_TYPE = "static-website";
+
+export function addonsForTrack(track: OfferingTrack): QuoteAddon[] {
+  return QUOTE_ADDONS.filter((a) => a.tracks.includes(track));
+}
+
+export function offeringsGroupedByTrack(): Record<OfferingTrack, ProjectOffering[]> {
+  return {
+    starter: PROJECT_OFFERINGS.filter((o) => o.track === "starter"),
+    foundation: PROJECT_OFFERINGS.filter((o) => o.track === "foundation"),
+    engineering: PROJECT_OFFERINGS.filter((o) => o.track === "engineering"),
+  };
+}
 
 export const SUPPORTED_CURRENCIES: SupportedCurrency[] = [
   { code: "EUR", label: "Euro (EUR)", symbol: "€", fallbackPerEur: 1 },
@@ -228,7 +502,9 @@ export const TEMP_QUOTATION_VALIDITY_DAYS = 14;
 
 export function getOffering(value: string): ProjectOffering {
   return (
-    PROJECT_OFFERINGS.find((o) => o.value === value) ?? PROJECT_OFFERINGS[PROJECT_OFFERINGS.length - 1]!
+    PROJECT_OFFERINGS.find((o) => o.value === value) ??
+    PROJECT_OFFERINGS.find((o) => o.value === DEFAULT_PROJECT_TYPE) ??
+    PROJECT_OFFERINGS[0]!
   );
 }
 
@@ -355,7 +631,10 @@ export function simulateInteractiveQuote(input: InteractiveQuoteInput): Interact
   const complexityLabel = complexityLabelForScope(input.scope);
   const [baseMin, baseMax] = rangeForScope(offering, input.scope);
 
-  const selectedAddons = QUOTE_ADDONS.filter((a) => input.addonIds.includes(a.id));
+  const allowedAddonIds = new Set(addonsForTrack(offering.track).map((a) => a.id));
+  const selectedAddons = QUOTE_ADDONS.filter(
+    (a) => input.addonIds.includes(a.id) && allowedAddonIds.has(a.id)
+  );
   const addonUplift = selectedAddons.reduce((sum, a) => sum + a.uplift, 0);
   const timelineMult = timelineMultiplier(input.timelineMonths);
 
@@ -377,11 +656,15 @@ export function simulateInteractiveQuote(input: InteractiveQuoteInput): Interact
   const band = getMarketBenchmark(input.projectType);
   const position = classifyVsMarket(midEur, band);
   const positionLabel =
-    position === "below-market"
-      ? "Competitive vs mid-market EU boutiques"
-      : position === "premium"
-        ? "Premium / complex scope vs typical mid-market"
-        : "Aligned with Western EU boutique mid-market";
+    offering.track === "starter"
+      ? position === "premium"
+        ? "Upper end of accessible starter work"
+        : "Accessible entry — FR / Africa-friendly ladder"
+      : position === "below-market"
+        ? "Competitive vs mid-market EU boutiques"
+        : position === "premium"
+          ? "Premium / complex scope vs typical mid-market"
+          : "Aligned with Western EU boutique mid-market";
 
   const breakdown = [
     {

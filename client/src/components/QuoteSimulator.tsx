@@ -8,11 +8,13 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import {
   COMPLEXITY_OPTIONS,
-  PROJECT_OFFERINGS,
-  QUOTE_ADDONS,
+  ENGAGEMENT_SITUATIONS,
   SUPPORTED_CURRENCIES,
+  addonsForTrack,
   complexityLabelForScope,
   formatMoney,
+  getOffering,
+  offeringsGroupedByTrack,
   simulateInteractiveQuote,
   timelineLabel,
   type InteractiveQuoteResult,
@@ -92,12 +94,17 @@ export function QuoteSimulator({
   onQuoteChange,
 }: QuoteSimulatorProps) {
   const panel = variant === "panel";
-  const [scope, setScope] = useState(50);
-  const [timelineMonths, setTimelineMonths] = useState(6);
+  const [situationId, setSituationId] = useState(ENGAGEMENT_SITUATIONS[0]!.id);
+  const [scope, setScope] = useState(ENGAGEMENT_SITUATIONS[0]!.defaultScope);
+  const [timelineMonths, setTimelineMonths] = useState(ENGAGEMENT_SITUATIONS[0]!.defaultMonths);
   const [addonIds, setAddonIds] = useState<string[]>([]);
   const [pulse, setPulse] = useState(0);
   const [publicId, setPublicId] = useState<string | null>(null);
   const [reference, setReference] = useState<string | null>(null);
+
+  const offering = useMemo(() => getOffering(projectType), [projectType]);
+  const availableAddons = useMemo(() => addonsForTrack(offering.track), [offering.track]);
+  const grouped = useMemo(() => offeringsGroupedByTrack(), []);
 
   const quote = useMemo(
     () =>
@@ -111,6 +118,20 @@ export function QuoteSimulator({
       }),
     [projectType, scope, timelineMonths, addonIds, currencyCode, ratesPerEur]
   );
+
+  useEffect(() => {
+    setAddonIds((prev) => prev.filter((id) => availableAddons.some((a) => a.id === id)));
+  }, [availableAddons]);
+
+  const applySituation = (id: string) => {
+    const situation = ENGAGEMENT_SITUATIONS.find((s) => s.id === id);
+    if (!situation) return;
+    setSituationId(situation.id);
+    onProjectTypeChange(situation.defaultType);
+    setScope(situation.defaultScope);
+    setTimelineMonths(situation.defaultMonths);
+    setAddonIds([]);
+  };
 
   const simulationKey = `${projectType}|${scope}|${timelineMonths}|${addonIds.join(",")}|${currencyCode}`;
 
@@ -153,9 +174,7 @@ export function QuoteSimulator({
   };
 
   const reset = () => {
-    setScope(50);
-    setTimelineMonths(6);
-    setAddonIds([]);
+    applySituation(ENGAGEMENT_SITUATIONS[0]!.id);
   };
 
   const ensureClient = () => {
@@ -205,8 +224,8 @@ export function QuoteSimulator({
             <p className="text-sm font-medium text-white">Live quote simulator</p>
             <p className={cn("text-gray-400", panel ? "text-xs" : "text-sm")}>
               {panel
-                ? "Adjust scope live — estimate updates instantly."
-                : "Market-calibrated ranges with live FX. Generate a temporary quotation to download or email."}
+                ? "Start where you are — tight budget to serious engineering."
+                : "Accessible starter work and serious product engineering. Live FX. Temporary PDF quotes."}
             </p>
           </div>
         </div>
@@ -220,6 +239,30 @@ export function QuoteSimulator({
         </button>
       </div>
 
+      <div className="space-y-1.5">
+        <Label className="text-white">What best describes you?</Label>
+        <div className="grid grid-cols-2 gap-1.5">
+          {ENGAGEMENT_SITUATIONS.map((situation) => (
+            <button
+              key={situation.id}
+              type="button"
+              onClick={() => applySituation(situation.id)}
+              className={cn(
+                "rounded-lg border px-2.5 py-2 text-left transition",
+                situationId === situation.id
+                  ? "border-[var(--hopstec-teal)] bg-[var(--hopstec-teal)]/10"
+                  : "border-white/10 bg-white/[0.02] hover:border-white/20"
+              )}
+            >
+              <span className="block text-xs font-medium text-white">{situation.label}</span>
+              <span className="mt-0.5 block text-[10px] leading-snug text-gray-500">
+                {situation.hint}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className={cn("grid grid-cols-1 gap-3", panel ? "sm:grid-cols-2" : "gap-4 md:grid-cols-2")}>
         <div className="space-y-1.5">
           <Label htmlFor="sim-projectType" className="text-white">
@@ -231,12 +274,31 @@ export function QuoteSimulator({
             onChange={(e) => onProjectTypeChange(e.target.value)}
             className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[var(--hopstec-teal)]"
           >
-            {PROJECT_OFFERINGS.map((type) => (
-              <option key={type.value} value={type.value}>
-                {type.label}
-              </option>
-            ))}
+            <optgroup label="Starter — accessible">
+              {grouped.starter.map((type) => (
+                <option key={type.value} value={type.value}>
+                  {type.label}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Foundation">
+              {grouped.foundation.map((type) => (
+                <option key={type.value} value={type.value}>
+                  {type.label}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Engineering — production">
+              {grouped.engineering.map((type) => (
+                <option key={type.value} value={type.value}>
+                  {type.label}
+                </option>
+              ))}
+            </optgroup>
           </select>
+          <p className="text-[11px] leading-4 text-[var(--hopstec-teal)]/90">
+            {offering.positioning}
+          </p>
           {!panel && <p className="text-xs text-gray-500">{quote.offering.description}</p>}
         </div>
 
@@ -315,9 +377,11 @@ export function QuoteSimulator({
       </div>
 
       <div className="space-y-1.5">
-        <Label className="text-white">Capability add-ons</Label>
+        <Label className="text-white">
+          {offering.track === "starter" ? "Useful extras" : "Capability add-ons"}
+        </Label>
         <div className="flex flex-wrap gap-1.5">
-          {QUOTE_ADDONS.map((addon) => {
+          {availableAddons.map((addon) => {
             const active = addonIds.includes(addon.id);
             return (
               <button
