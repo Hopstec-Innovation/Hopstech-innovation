@@ -112,9 +112,12 @@ export const magicLinkRouter = router({
       const email = input.email.trim().toLowerCase();
       const { name, portal } = input;
 
+      // Resolve account first so greetings always use the stored profile name
+      // when this email already belongs to someone (ignore mistyped aliases).
+      const existing = await getUserByEmail(email);
+
       // Staff path: never reveal whether the email is provisioned.
       if (portal === "team") {
-        const existing = await getUserByEmail(email);
         const authorised = canRequestStaffMagicLink(existing, email);
 
         if (!authorised) {
@@ -124,6 +127,12 @@ export const magicLinkRouter = router({
           return { success: true, message: STAFF_GENERIC_OK };
         }
       }
+
+      const greetingName =
+        existing?.name?.trim() ||
+        name?.trim() ||
+        email.split("@")[0] ||
+        "there";
 
       const ip =
         (ctx.req?.headers?.["x-forwarded-for"] as string) ||
@@ -151,7 +160,7 @@ export const magicLinkRouter = router({
       try {
         await sendMagicLinkEmail({
           to: email,
-          name: name || email.split("@")[0],
+          name: greetingName,
           magicLink: magicLinkUrl,
           expiresInMinutes: MAGIC_LINK_EXPIRY_MINUTES,
         });
