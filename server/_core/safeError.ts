@@ -13,10 +13,15 @@ const ALLOWED_PUBLIC_MESSAGES = new Set([
   "If this account is authorised, a sign-in link has been sent.",
   "Magic link sent! Check your email to sign in.",
   "Logged out successfully",
+  "Please provide a detailed reason (at least 10 characters)",
+  "You already have a pending status change request for this project.",
+  "This project is already closed or cancelled.",
+  "Service temporarily unavailable. Please try again in a moment.",
+  "Conversation not found",
+  "Claim this conversation before replying",
 ]);
 
-const GENERIC_PUBLIC =
-  "Something went wrong. Please try again or request a new sign-in link.";
+const GENERIC_PUBLIC = "Something went wrong. Please try again.";
 
 const AUTH_VERIFY_GENERIC =
   "We could not complete sign-in. The link may have expired or already been used.";
@@ -38,13 +43,12 @@ function looksLikeInternalError(message: string): boolean {
     lower.includes("neon") ||
     lower.includes("postgres") ||
     lower.includes("drizzle") ||
-    lower.includes("database") ||
-    lower.includes("connection") ||
     lower.includes("econnrefused") ||
     lower.includes("jwt") ||
     lower.includes("secret") ||
-    /@/.test(message) ||
-    /\/[^\s]+/.test(message)
+    // Emails / absolute URLs — not ordinary validation copy
+    /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i.test(message) ||
+    /https?:\/\//i.test(message)
   );
 }
 

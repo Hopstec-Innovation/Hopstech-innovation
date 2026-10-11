@@ -102,6 +102,26 @@ const InternalProjectPage = () => {
     },
     onError: (e) => toast.error(e.message),
   });
+  const claimEngagement = trpc.ops.claimEngagement.useMutation({
+    onSuccess: () => {
+      toast.success("Engagement claimed — it is on your job load");
+      void utils.ops.getTeamWorkload.invalidate();
+      invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const reviewStatusChange = trpc.clientPortal.approveStatusChange.useMutation({
+    onSuccess: (_data, vars) => {
+      toast.success(vars.approved ? "Cancellation approved" : "Request rejected");
+      void utils.ops.listPendingClientActions.invalidate();
+      invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const pendingActions = trpc.ops.listPendingClientActions.useQuery(undefined, {
+    enabled: allowed && !!projectId,
+    refetchInterval: 10000,
+  });
   const startLive = trpc.liveRun.startLiveRun.useMutation({
     onSuccess: () => {
       toast.success("Live run started");
@@ -141,6 +161,16 @@ const InternalProjectPage = () => {
     () => data?.docs.find((d) => d.type === "po"),
     [data?.docs]
   );
+  const projectMeta =
+    project?.metadata && typeof project.metadata === "object"
+      ? (project.metadata as Record<string, unknown>)
+      : {};
+  const isCancelled = Boolean(projectMeta.cancelledAt);
+  const cancelReason =
+    typeof projectMeta.cancelReason === "string" ? projectMeta.cancelReason : null;
+  const pendingCancel = pendingActions.data?.find(
+    (action) => action.projectId === projectId && action.requestType === "cancel"
+  );
 
   if (!projectId) {
     return (
@@ -175,9 +205,11 @@ const InternalProjectPage = () => {
 
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <Badge className="border-white/15 bg-white/5 text-gray-200">
-          {project.commercialStage.replace("_", " ")}
+          {isCancelled ? "cancelled" : project.commercialStage.replace("_", " ")}
         </Badge>
-        {project.commitDate ? (
+        {isCancelled ? (
+          <span className="text-sm text-red-300">Closed after client cancellation</span>
+        ) : project.commitDate ? (
           <span className="text-sm text-gray-400">
             Commit {new Date(project.commitDate).toLocaleDateString()}
           </span>
@@ -187,7 +219,68 @@ const InternalProjectPage = () => {
         <span className="text-sm text-gray-500">
           Client: {data.client?.name || "—"} ({data.client?.email || "—"})
         </span>
+        {!project.leadAssigneeId && !isCancelled ? (
+          <button
+            type="button"
+            className="ops-button primary"
+            disabled={claimEngagement.isPending}
+            onClick={() => claimEngagement.mutate({ projectId })}
+          >
+            Claim engagement
+          </button>
+        ) : null}
       </div>
+
+      {(isCancelled || pendingCancel) && (
+        <div
+          className={`mb-6 rounded-xl border p-4 ${
+            isCancelled
+              ? "border-red-400/30 bg-red-500/10"
+              : "border-amber-400/30 bg-amber-500/10"
+          }`}
+        >
+          <p className={`text-sm font-medium ${isCancelled ? "text-red-100" : "text-amber-100"}`}>
+            {isCancelled ? "Client cancelled this engagement" : "Client requested cancellation"}
+          </p>
+          <p className="mt-2 text-sm text-slate-200">
+            {cancelReason || pendingCancel?.reason || "No reason recorded"}
+          </p>
+          {pendingCancel ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                className="bg-red-600 hover:bg-red-700"
+                disabled={reviewStatusChange.isPending}
+                onClick={() =>
+                  reviewStatusChange.mutate({
+                    requestId: pendingCancel.id,
+                    approved: true,
+                    adminNotes: "Cancellation approved after client request",
+                  })
+                }
+              >
+                Approve cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={reviewStatusChange.isPending}
+                onClick={() =>
+                  reviewStatusChange.mutate({
+                    requestId: pendingCancel.id,
+                    approved: false,
+                    adminNotes: "Cancellation rejected — continue engagement",
+                  })
+                }
+              >
+                Keep engagement open
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      )}
 
       <div className="ops-project-summary"><div>Delivery lead<strong>{data.assignee?.name || "Unassigned"}</strong></div><div>Team<strong>{project.department || "Not assigned"}</strong></div><div>Service line<strong>{project.serviceLine || "Not set"}</strong></div><div>Commit date<strong>{shortDate(project.commitDate)}</strong></div></div>
       <section className="ops-panel" aria-label="Engagement workflow"><div className="ops-stages">{workflowStages.map((s, i) => {

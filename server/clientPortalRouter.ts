@@ -29,6 +29,8 @@ import { privateBlobPut } from "./blobStorage";
 import { nanoid } from "nanoid";
 import { routeClientChatMessage } from "./chatRouter";
 import { fallbackRatesFromEur } from "../shared/quoteSimulation";
+import { getCancellationPolicy } from "../shared/cancellationPolicy";
+import { isInternalRole } from "../shared/roles";
 
 export const clientPortalRouter = router({
   /**
@@ -1420,20 +1422,27 @@ export const clientPortalRouter = router({
    * ========================================
    */
 
-  // Request project status change
+  // Request project status change (cancel syncs to ops; pre-contract cancels apply immediately)
   requestStatusChange: protectedProcedure
     .input(
       z.object({
         projectId: z.number(),
         requestType: z.enum(["pause", "cancel", "resume", "archive"]),
-        reason: z.string().min(10),
+        reason: z
+          .string()
+          .trim()
+          .min(10, "Please provide a detailed reason (at least 10 characters)"),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+      if (!db) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Service temporarily unavailable. Please try again in a moment.",
+        });
+      }
 
-      // Get current project
       const [project] = await db
         .select()
         .from(clientProjectsExtended)
@@ -1449,12 +1458,40 @@ export const clientPortalRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
       }
 
-      // Determine target status based on request type
-      let toStatus = project.status;
+      if (project.status === "archived" || project.commercialStage === "closed") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "This project is already closed or cancelled.",
+        });
+      }
+
+      const [pendingExisting] = await db
+        .select({ id: projectStatusChanges.id })
+        .from(projectStatusChanges)
+        .where(
+          and(
+            eq(projectStatusChanges.projectId, input.projectId),
+            eq(projectStatusChanges.status, "pending")
+          )
+        )
+        .limit(1);
+      if (pendingExisting) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "You already have a pending status change request for this project.",
+        });
+      }
+
+      let toStatus: "planning" | "in_progress" | "on_hold" | "completed" | "archived" =
+        project.status;
       if (input.requestType === "pause") toStatus = "on_hold";
       if (input.requestType === "cancel") toStatus = "archived";
       if (input.requestType === "resume") toStatus = "in_progress";
       if (input.requestType === "archive") toStatus = "archived";
+
+      const policy =
+        input.requestType === "cancel" ? getCancellationPolicy(project) : null;
+      const autoApply = Boolean(policy?.autoApply);
 
       const [statusChange] = await db
         .insert(projectStatusChanges)
@@ -1465,24 +1502,122 @@ export const clientPortalRouter = router({
           toStatus,
           reason: input.reason,
           requestType: input.requestType,
-          status: "pending",
+          status: autoApply ? "approved" : "pending",
+          approvedBy: autoApply ? ctx.user.id : null,
+          approvedAt: autoApply ? new Date() : null,
+          adminNotes: autoApply ? policy?.staffSummary ?? null : null,
         })
         .returning();
 
-      // Create notification for admin
+      if (autoApply && input.requestType === "cancel") {
+        const prevMeta =
+          project.metadata && typeof project.metadata === "object"
+            ? (project.metadata as Record<string, unknown>)
+            : {};
+        await db
+          .update(clientProjectsExtended)
+          .set({
+            status: "archived",
+            commercialStage: "closed",
+            updatedAt: new Date(),
+            completedAt: new Date(),
+            metadata: {
+              ...prevMeta,
+              cancelledAt: new Date().toISOString(),
+              cancelReason: input.reason,
+              cancelRequestedBy: ctx.user.id,
+              cancelTier: policy?.tier,
+              financialImpact: policy?.financialImpact,
+            },
+          })
+          .where(eq(clientProjectsExtended.id, project.id));
+
+        await db.insert(engagementEvents).values({
+          projectId: project.id,
+          type: "client_cancelled",
+          message: `Client cancelled: ${input.reason}`,
+          actorId: ctx.user.id,
+          isInternal: false,
+          metadata: {
+            reason: input.reason,
+            tier: policy?.tier,
+            financialImpact: policy?.financialImpact,
+            autoApplied: true,
+          },
+        });
+      } else if (input.requestType === "cancel") {
+        await db.insert(engagementEvents).values({
+          projectId: project.id,
+          type: "client_cancel_requested",
+          message: `Client requested cancellation (awaiting review): ${input.reason}`,
+          actorId: ctx.user.id,
+          isInternal: false,
+          metadata: {
+            reason: input.reason,
+            tier: policy?.tier,
+            financialImpact: policy?.financialImpact,
+            statusChangeId: statusChange.id,
+          },
+        });
+      } else {
+        await db.insert(engagementEvents).values({
+          projectId: project.id,
+          type: `client_${input.requestType}_requested`,
+          message: `Client requested to ${input.requestType}: ${input.reason}`,
+          actorId: ctx.user.id,
+          isInternal: false,
+          metadata: { reason: input.reason, statusChangeId: statusChange.id },
+        });
+      }
+
+      const staffRecipients = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(inArray(users.role, ["admin", "staff"]));
+
+      const title = autoApply
+        ? `Client cancelled “${project.title}”`
+        : `Client ${input.requestType} request — ${project.title}`;
+      const message = autoApply
+        ? `${ctx.user.name || "Client"} cancelled this engagement. Reason: ${input.reason}`
+        : `${ctx.user.name || "Client"} requested to ${input.requestType}. Reason: ${input.reason}`;
+
+      if (staffRecipients.length) {
+        await db.insert(notifications).values(
+          staffRecipients.map(({ id }) => ({
+            userId: id,
+            type: "project_update" as const,
+            priority:
+              input.requestType === "cancel" ? ("urgent" as const) : ("high" as const),
+            title,
+            message: message.length > 280 ? `${message.slice(0, 277)}…` : message,
+            link: `/internal/projects/${project.id}`,
+            actionType: "view" as const,
+            actionUrl: `/internal/projects/${project.id}`,
+            actionLabel: autoApply ? "View engagement" : "Review request",
+            read: false,
+          }))
+        );
+      }
+
+      // Confirm to the client (their own notification center)
       await db.insert(notifications).values({
-        userId: ctx.user.id, // In real app, send to admin
+        userId: ctx.user.id,
         type: "project_update",
-        priority: input.requestType === "cancel" ? "urgent" : "high",
-        title: `Project ${input.requestType.charAt(0).toUpperCase() + input.requestType.slice(1)} Request`,
-        message: `${ctx.user.name} requested to ${input.requestType} project "${project.title}"`,
-        link: `/client-portal/projects/${input.projectId}`,
-        actionType: "approve",
-        actionUrl: `/admin/status-changes/${statusChange.id}`,
-        actionLabel: "Review Request",
+        priority: "high",
+        title: autoApply ? "Project cancelled" : "Request submitted",
+        message: autoApply
+          ? `“${project.title}” is cancelled. ${policy?.clientSummary ?? ""}`
+          : `Your ${input.requestType} request was sent to the Hopstec team.`,
+        link: `/client-portal/projects/${project.id}`,
+        read: false,
       });
 
-      return statusChange;
+      return {
+        ...statusChange,
+        applied: autoApply,
+        policy,
+      };
     }),
 
   // Get status change requests
@@ -1511,7 +1646,7 @@ export const clientPortalRouter = router({
       return requests;
     }),
 
-  // Approve/reject status change (admin only)
+  // Approve/reject status change (staff / admin only)
   approveStatusChange: protectedProcedure
     .input(
       z.object({
@@ -1521,8 +1656,35 @@ export const clientPortalRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      if (!isInternalRole(ctx.user.role)) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Hopstec team access required",
+        });
+      }
+
       const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+      if (!db) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Service temporarily unavailable. Please try again in a moment.",
+        });
+      }
+
+      const [existing] = await db
+        .select()
+        .from(projectStatusChanges)
+        .where(eq(projectStatusChanges.id, input.requestId))
+        .limit(1);
+      if (!existing) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Request not found" });
+      }
+      if (existing.status !== "pending") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "This request was already reviewed.",
+        });
+      }
 
       const [request] = await db
         .update(projectStatusChanges)
@@ -1536,22 +1698,82 @@ export const clientPortalRouter = router({
         .returning();
 
       if (request && input.approved) {
-        // Update project status
-        await db
-          .update(clientProjectsExtended)
-          .set({ status: request.toStatus as any })
-          .where(eq(clientProjectsExtended.id, request.projectId));
+        const [project] = await db
+          .select()
+          .from(clientProjectsExtended)
+          .where(eq(clientProjectsExtended.id, request.projectId))
+          .limit(1);
+        const prevMeta =
+          project?.metadata && typeof project.metadata === "object"
+            ? (project.metadata as Record<string, unknown>)
+            : {};
+
+        if (request.requestType === "cancel") {
+          await db
+            .update(clientProjectsExtended)
+            .set({
+              status: "archived",
+              commercialStage: "closed",
+              updatedAt: new Date(),
+              completedAt: new Date(),
+              metadata: {
+                ...prevMeta,
+                cancelledAt: new Date().toISOString(),
+                cancelReason: request.reason,
+                cancelApprovedBy: ctx.user.id,
+                cancelTier: "committed_review",
+                financialImpact: "review",
+              },
+            })
+            .where(eq(clientProjectsExtended.id, request.projectId));
+
+          await db.insert(engagementEvents).values({
+            projectId: request.projectId,
+            type: "client_cancel_approved",
+            message: `Cancellation approved by ${ctx.user.name || "staff"}: ${request.reason}`,
+            actorId: ctx.user.id,
+            isInternal: true,
+            metadata: { reason: request.reason, statusChangeId: request.id },
+          });
+        } else {
+          await db
+            .update(clientProjectsExtended)
+            .set({
+              status: request.toStatus as typeof clientProjectsExtended.$inferSelect.status,
+              updatedAt: new Date(),
+            })
+            .where(eq(clientProjectsExtended.id, request.projectId));
+
+          await db.insert(engagementEvents).values({
+            projectId: request.projectId,
+            type: `status_${request.requestType}_approved`,
+            message: `${request.requestType} approved by ${ctx.user.name || "staff"}`,
+            actorId: ctx.user.id,
+            isInternal: true,
+          });
+        }
+      } else if (request && !input.approved) {
+        await db.insert(engagementEvents).values({
+          projectId: request.projectId,
+          type: `status_${request.requestType}_rejected`,
+          message: `${request.requestType} request rejected by ${ctx.user.name || "staff"}`,
+          actorId: ctx.user.id,
+          isInternal: true,
+          metadata: { adminNotes: input.adminNotes || null },
+        });
       }
 
       if (request) {
-        // Notify requester
         await db.insert(notifications).values({
           userId: request.requestedBy,
           type: "project_update",
           priority: "high",
-          title: `Status Change ${input.approved ? "Approved" : "Rejected"}`,
-          message: `Your request to ${request.requestType} the project has been ${input.approved ? "approved" : "rejected"}`,
+          title: `Status change ${input.approved ? "approved" : "rejected"}`,
+          message: `Your request to ${request.requestType} the project has been ${
+            input.approved ? "approved" : "rejected"
+          }`,
           link: `/client-portal/projects/${request.projectId}`,
+          read: false,
         });
       }
 

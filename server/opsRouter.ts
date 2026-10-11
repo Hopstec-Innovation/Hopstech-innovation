@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne } from "drizzle-orm";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { adminProcedure, protectedProcedure, staffProcedure, router } from "./_core/trpc";
@@ -7,10 +7,13 @@ import { getDb } from "./db";
 import { upsertUser, getUserByEmail } from "./db";
 import { nanoid } from "nanoid";
 import {
+  chatConversations,
   clientProjectsExtended,
   engagementDocuments,
   engagementEvents,
+  notifications,
   projectInquiries,
+  projectStatusChanges,
   users,
   type ClientProjectExtended,
 } from "../drizzle/schema";
@@ -181,14 +184,191 @@ export const opsRouter = router({
     const allUsers = await db.select().from(users);
     const byId = new Map(allUsers.map((u) => [u.id, u]));
 
-    return projects.map((p) => ({
-      ...p,
-      clientName: byId.get(p.userId)?.name || null,
-      clientEmail: byId.get(p.userId)?.email || null,
-      assigneeName: p.leadAssigneeId
-        ? byId.get(p.leadAssigneeId)?.name || null
-        : null,
+    const pendingCancels = await db
+      .select()
+      .from(projectStatusChanges)
+      .where(
+        and(
+          eq(projectStatusChanges.status, "pending"),
+          eq(projectStatusChanges.requestType, "cancel")
+        )
+      );
+    const pendingByProject = new Map(pendingCancels.map((r) => [r.projectId, r]));
+
+    return projects.map((p) => {
+      const meta =
+        p.metadata && typeof p.metadata === "object"
+          ? (p.metadata as Record<string, unknown>)
+          : {};
+      const cancelledAt =
+        typeof meta.cancelledAt === "string" ? meta.cancelledAt : null;
+      const cancelReason =
+        typeof meta.cancelReason === "string" ? meta.cancelReason : null;
+      const pendingCancel = pendingByProject.get(p.id) || null;
+      return {
+        ...p,
+        clientName: byId.get(p.userId)?.name || null,
+        clientEmail: byId.get(p.userId)?.email || null,
+        assigneeName: p.leadAssigneeId
+          ? byId.get(p.leadAssigneeId)?.name || null
+          : null,
+        isCancelled: Boolean(cancelledAt) || (p.status === "archived" && p.commercialStage === "closed" && cancelReason),
+        cancelledAt,
+        cancelReason,
+        pendingCancel: pendingCancel
+          ? {
+              id: pendingCancel.id,
+              reason: pendingCancel.reason,
+              createdAt: pendingCancel.createdAt,
+              requestedBy: pendingCancel.requestedBy,
+            }
+          : null,
+      };
+    });
+  }),
+
+  /** Pending client status actions for the ops inbox banner */
+  listPendingClientActions: staffProcedure.query(async () => {
+    const db = await requireDb();
+    const rows = await db
+      .select({
+        request: projectStatusChanges,
+        projectTitle: clientProjectsExtended.title,
+        clientName: users.name,
+        clientEmail: users.email,
+      })
+      .from(projectStatusChanges)
+      .innerJoin(
+        clientProjectsExtended,
+        eq(projectStatusChanges.projectId, clientProjectsExtended.id)
+      )
+      .innerJoin(users, eq(projectStatusChanges.requestedBy, users.id))
+      .where(eq(projectStatusChanges.status, "pending"))
+      .orderBy(desc(projectStatusChanges.createdAt))
+      .limit(50);
+
+    return rows.map((row) => ({
+      id: row.request.id,
+      projectId: row.request.projectId,
+      projectTitle: row.projectTitle,
+      requestType: row.request.requestType,
+      reason: row.request.reason,
+      createdAt: row.request.createdAt,
+      clientName: row.clientName,
+      clientEmail: row.clientEmail,
     }));
+  }),
+
+  /** Claim an unassigned engagement as delivery lead */
+  claimEngagement: staffProcedure
+    .input(z.object({ projectId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await requireDb();
+      const project = await getProjectOrThrow(input.projectId);
+      if (project.commercialStage === "closed" || project.status === "archived") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "This engagement is closed and cannot be claimed.",
+        });
+      }
+      if (project.leadAssigneeId && project.leadAssigneeId !== ctx.user.id) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "Another teammate already owns this engagement. Ask a lead to reassign.",
+        });
+      }
+
+      await db
+        .update(clientProjectsExtended)
+        .set({ leadAssigneeId: ctx.user.id, updatedAt: new Date() })
+        .where(eq(clientProjectsExtended.id, input.projectId));
+
+      await logEvent({
+        projectId: input.projectId,
+        type: "engagement_claimed",
+        message: `${ctx.user.name || "Staff"} claimed this engagement`,
+        actorId: ctx.user.id,
+        isInternal: true,
+      });
+
+      await db.insert(notifications).values({
+        userId: project.userId,
+        type: "project_update",
+        priority: "medium",
+        title: "Delivery lead assigned",
+        message: `${ctx.user.name || "A Hopstec teammate"} is now owning your engagement.`,
+        link: `/client-portal/projects/${project.id}`,
+        read: false,
+      });
+
+      return { success: true, leadAssigneeId: ctx.user.id };
+    }),
+
+  /** Workload board for managers / leads */
+  getTeamWorkload: staffProcedure.query(async () => {
+    const db = await requireDb();
+    const staff = (
+      await db
+        .select({
+          id: users.id,
+          name: users.name,
+          email: users.email,
+          role: users.role,
+          jobTitle: users.jobTitle,
+          availability: users.availability,
+        })
+        .from(users)
+        .orderBy(asc(users.name))
+    ).filter((row) => isInternalRole(row.role));
+
+    const projects = await db
+      .select({
+        id: clientProjectsExtended.id,
+        title: clientProjectsExtended.title,
+        commercialStage: clientProjectsExtended.commercialStage,
+        status: clientProjectsExtended.status,
+        leadAssigneeId: clientProjectsExtended.leadAssigneeId,
+        department: clientProjectsExtended.department,
+        updatedAt: clientProjectsExtended.updatedAt,
+      })
+      .from(clientProjectsExtended)
+      .where(
+        and(
+          ne(clientProjectsExtended.commercialStage, "closed"),
+          ne(clientProjectsExtended.status, "archived")
+        )
+      );
+
+    const chats = await db
+      .select({
+        id: chatConversations.id,
+        assignedTo: chatConversations.assignedTo,
+        status: chatConversations.status,
+        lastMessageAt: chatConversations.lastMessageAt,
+        clientId: chatConversations.clientId,
+      })
+      .from(chatConversations)
+      .where(
+        inArray(chatConversations.status, ["waiting", "assigned", "snoozed"])
+      );
+
+    return staff.map((member) => {
+      const engagements = projects.filter((p) => p.leadAssigneeId === member.id);
+      const conversations = chats.filter((c) => c.assignedTo === member.id);
+      return {
+        ...member,
+        engagementCount: engagements.length,
+        chatCount: conversations.length,
+        loadScore: engagements.length * 2 + conversations.length,
+        engagements,
+        conversations: conversations.map((c) => ({
+          id: c.id,
+          status: c.status,
+          lastMessageAt: c.lastMessageAt,
+          clientId: c.clientId,
+        })),
+      };
+    });
   }),
 
   getEngagement: staffProcedure
