@@ -41,6 +41,7 @@ const CreateProjectModal = ({ open, onOpenChange }: CreateProjectModalProps) => 
   const [description, setDescription] = useState("");
   const [projectTypeValue, setProjectTypeValue] = useState(DEFAULT_PROJECT_TYPE);
   const [currencyCode, setCurrencyCode] = useState("EUR");
+  const [clientTargetBudget, setClientTargetBudget] = useState("");
   const [priority, setPriority] = useState<"low" | "medium" | "high" | "urgent">("medium");
   const [documents, setDocuments] = useState<File[]>([]);
   const [liveQuote, setLiveQuote] = useState<InteractiveQuoteResult | null>(null);
@@ -76,6 +77,7 @@ const CreateProjectModal = ({ open, onOpenChange }: CreateProjectModalProps) => 
     setDescription("");
     setProjectTypeValue(DEFAULT_PROJECT_TYPE);
     setCurrencyCode("EUR");
+    setClientTargetBudget("");
     setPriority("medium");
     setDocuments([]);
     setLiveQuote(null);
@@ -106,14 +108,20 @@ const CreateProjectModal = ({ open, onOpenChange }: CreateProjectModalProps) => 
       `Service: ${liveQuote.offering.label}`,
       `Scope: ${liveQuote.complexityLabel} (${Math.round(liveQuote.scope)}/100)`,
       `Timeline: ${liveQuote.timelineMonths} months (${liveQuote.timelineLabel})`,
+      `Currency: ${currencyCode}`,
       `Add-ons: ${
         liveQuote.selectedAddons.length
           ? liveQuote.selectedAddons.map((a) => a.label).join(", ")
           : "None"
       }`,
       `Indicative range: ${liveQuote.budgetSummary}`,
+      clientTargetBudget.trim()
+        ? `Client budget in mind: ${clientTargetBudget.trim()}`
+        : null,
       `Market: ${liveQuote.market.positionLabel}`,
-    ].join("\n");
+    ]
+      .filter(Boolean)
+      .join("\n");
 
     const encodedDocuments = await Promise.all(
       documents.map(
@@ -153,7 +161,8 @@ const CreateProjectModal = ({ open, onOpenChange }: CreateProjectModalProps) => 
       description: `${description.trim()}${simNotes}`,
       projectType: offering.label,
       priority,
-      budget: Math.round(liveQuote.midLocal * 100),
+      // Store midpoint in EUR cents so the portal budget label stays currency-correct
+      budget: Math.round(liveQuote.midEur * 100),
       technologies: liveQuote.selectedAddons.map((a) => a.label),
       documents: encodedDocuments,
     });
@@ -330,6 +339,8 @@ const CreateProjectModal = ({ open, onOpenChange }: CreateProjectModalProps) => 
                 email: user?.email || "",
                 description,
               }}
+              clientTargetBudget={clientTargetBudget}
+              onClientTargetBudgetChange={setClientTargetBudget}
               onProjectTypeChange={setProjectTypeValue}
               onCurrencyChange={setCurrencyCode}
               onQuoteChange={handleQuoteChange}

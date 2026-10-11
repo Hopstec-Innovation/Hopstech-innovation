@@ -4,6 +4,7 @@ import { Calculator, Download, Mail, RefreshCw, FileBadge2, Loader2 } from "luci
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import {
@@ -36,6 +37,9 @@ type QuoteSimulatorProps = {
     phone?: string;
     description?: string;
   };
+  /** Budget the customer has in mind (free text) */
+  clientTargetBudget?: string;
+  onClientTargetBudgetChange?: (value: string) => void;
   onProjectTypeChange: (value: string) => void;
   onCurrencyChange: (value: string) => void;
   onQuoteChange: (quote: InteractiveQuoteResult) => void;
@@ -89,6 +93,8 @@ export function QuoteSimulator({
   variant = "default",
   className,
   client,
+  clientTargetBudget = "",
+  onClientTargetBudgetChange,
   onProjectTypeChange,
   onCurrencyChange,
   onQuoteChange,
@@ -101,6 +107,13 @@ export function QuoteSimulator({
   const [pulse, setPulse] = useState(0);
   const [publicId, setPublicId] = useState<string | null>(null);
   const [reference, setReference] = useState<string | null>(null);
+  const [pdfBase64, setPdfBase64] = useState<string | null>(null);
+  const [pdfFileName, setPdfFileName] = useState<string | null>(null);
+  const [localBudget, setLocalBudget] = useState(clientTargetBudget);
+
+  useEffect(() => {
+    setLocalBudget(clientTargetBudget);
+  }, [clientTargetBudget]);
 
   const offering = useMemo(() => getOffering(projectType), [projectType]);
   const availableAddons = useMemo(() => addonsForTrack(offering.track), [offering.track]);
@@ -143,13 +156,35 @@ export function QuoteSimulator({
   useEffect(() => {
     setPublicId(null);
     setReference(null);
-  }, [simulationKey]);
+    setPdfBase64(null);
+    setPdfFileName(null);
+  }, [simulationKey, localBudget]);
+
+  const quotePayload = () => ({
+    name: client.name.trim(),
+    email: client.email.trim(),
+    company: client.company?.trim() || undefined,
+    phone: client.phone?.trim() || undefined,
+    description: client.description?.trim() || undefined,
+    clientTargetBudget: localBudget.trim() || undefined,
+    projectType,
+    scope,
+    timelineMonths,
+    addonIds,
+    currencyCode,
+  });
 
   const createMutation = trpc.tempQuotation.create.useMutation({
     onSuccess: (data) => {
       setPublicId(data.publicId);
       setReference(data.reference);
-      toast.success(`Temporary quotation ${data.reference} ready`);
+      setPdfBase64(data.base64);
+      setPdfFileName(data.fileName);
+      toast.success(
+        data.persisted
+          ? `Temporary quotation ${data.reference} ready — download or email below`
+          : `PDF ready for ${data.reference} — download or email below`
+      );
     },
     onError: (error) => {
       toast.error(error.message || "Could not generate temporary quotation");
@@ -175,15 +210,17 @@ export function QuoteSimulator({
 
   const reset = () => {
     applySituation(ENGAGEMENT_SITUATIONS[0]!.id);
+    setLocalBudget("");
+    onClientTargetBudgetChange?.("");
   };
 
   const ensureClient = () => {
     if (!client.name.trim() || client.name.trim().length < 2) {
-      toast.error("Enter your full name before generating a quotation");
+      toast.error("Enter your full name (left / above) before generating a PDF");
       return false;
     }
     if (!client.email.trim() || !client.email.includes("@")) {
-      toast.error("Enter a valid email before generating a quotation");
+      toast.error("Enter a valid email before generating a PDF");
       return false;
     }
     return true;
@@ -191,19 +228,31 @@ export function QuoteSimulator({
 
   const generate = () => {
     if (!ensureClient()) return;
-    createMutation.mutate({
-      name: client.name.trim(),
-      email: client.email.trim(),
-      company: client.company?.trim() || undefined,
-      phone: client.phone?.trim() || undefined,
-      description: client.description?.trim() || undefined,
-      projectType,
-      scope,
-      timelineMonths,
-      addonIds,
-      currencyCode,
+    createMutation.mutate(quotePayload());
+  };
+
+  const downloadPdf = () => {
+    if (pdfBase64 && pdfFileName) {
+      downloadBase64Pdf(pdfBase64, pdfFileName);
+      toast.success("PDF downloaded");
+      return;
+    }
+    if (!ensureClient()) return;
+    pdfMutation.mutate({
+      publicId: publicId || undefined,
+      payload: quotePayload(),
     });
   };
+
+  const emailPdf = () => {
+    if (!ensureClient()) return;
+    emailMutation.mutate({
+      publicId: publicId || undefined,
+      payload: quotePayload(),
+    });
+  };
+
+  const activeComplexity = COMPLEXITY_OPTIONS.find((t) => t.value === quote.complexity);
 
   const barWidth = Math.max(12, Math.min(92, scope * 0.7 + addonIds.length * 3));
 
@@ -335,6 +384,7 @@ export function QuoteSimulator({
                 key={tier.value}
                 type="button"
                 onClick={() => setScope(tier.scope)}
+                title={tier.hint}
                 className={cn(
                   "rounded-md px-2 py-1 text-xs transition",
                   quote.complexity === tier.value
@@ -342,19 +392,42 @@ export function QuoteSimulator({
                     : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
                 )}
               >
-                {tier.label}
+                {tier.shortLabel}
               </button>
             ))}
           </div>
         </div>
         <Slider
-          min={0}
+          min={5}
           max={100}
           step={1}
-          value={[scope]}
+          value={[Math.max(5, scope)]}
           onValueChange={(v) => setScope(v[0] ?? 50)}
           className="[&_[data-slot=slider-track]]:bg-slate-700 [&_[data-slot=slider-range]]:bg-[var(--hopstec-teal)] [&_[data-slot=slider-thumb]]:border-[var(--hopstec-teal)]"
         />
+        {activeComplexity && (
+          <p className="text-[11px] leading-4 text-gray-500">{activeComplexity.hint}</p>
+        )}
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="sim-client-budget" className="text-white">
+          Your budget in mind <span className="text-gray-500">(optional)</span>
+        </Label>
+        <Input
+          id="sim-client-budget"
+          value={localBudget}
+          onChange={(e) => {
+            setLocalBudget(e.target.value);
+            onClientTargetBudgetChange?.(e.target.value);
+          }}
+          placeholder={`e.g. 8 000 ${currencyCode}, or “around €2k”`}
+          className="border-slate-700 bg-slate-950 text-white placeholder:text-gray-600"
+        />
+        <p className="text-[11px] leading-4 text-gray-500">
+          Tell us what you can invest — we use it in the PDF and your quotation request. You can also
+          mention it in the project description.
+        </p>
       </div>
 
       <div className="space-y-2">
@@ -506,6 +579,12 @@ export function QuoteSimulator({
           </p>
         )}
 
+        <p className="text-[11px] leading-4 text-amber-100/60">
+          {pdfBase64
+            ? "PDF ready — download or email it now."
+            : "Enter your name & email, then Generate. Download and Email unlock after that."}
+        </p>
+
         <div className={cn("flex gap-2", panel ? "flex-wrap" : "flex-col sm:flex-row")}>
           <Button
             type="button"
@@ -525,9 +604,9 @@ export function QuoteSimulator({
             type="button"
             size={panel ? "sm" : "default"}
             variant="outline"
-            disabled={!publicId || pdfMutation.isPending}
-            onClick={() => publicId && pdfMutation.mutate({ publicId })}
-            className="border-white/15 bg-transparent text-white hover:bg-white/5"
+            disabled={pdfMutation.isPending || createMutation.isPending}
+            onClick={downloadPdf}
+            className="border-white/15 bg-transparent text-white hover:bg-white/5 disabled:opacity-40"
           >
             {pdfMutation.isPending ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -540,9 +619,9 @@ export function QuoteSimulator({
             type="button"
             size={panel ? "sm" : "default"}
             variant="outline"
-            disabled={!publicId || emailMutation.isPending}
-            onClick={() => publicId && emailMutation.mutate({ publicId })}
-            className="border-white/15 bg-transparent text-white hover:bg-white/5"
+            disabled={emailMutation.isPending || createMutation.isPending}
+            onClick={emailPdf}
+            className="border-white/15 bg-transparent text-white hover:bg-white/5 disabled:opacity-40"
           >
             {emailMutation.isPending ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

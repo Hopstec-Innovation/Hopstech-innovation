@@ -629,15 +629,21 @@ const ClientProjectDetailPage = () => {
                   <CardTitle className="text-white">Project Details</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {project.budget && (
+                  {project.budget != null && project.budget > 0 && (
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-green-500/20 rounded-lg">
                         <DollarSign className="h-4 w-4 text-green-400" />
                       </div>
                       <div>
-                        <p className="text-xs text-gray-400">Budget</p>
+                        <p className="text-xs text-gray-400">Indicative mid (EUR)</p>
                         <p className="text-white font-medium">
-                          ${(project.budget / 100).toLocaleString()}
+                          €{(project.budget / 100).toLocaleString(undefined, {
+                            minimumFractionDigits: 0,
+                            maximumFractionDigits: 0,
+                          })}
+                        </p>
+                        <p className="text-[11px] text-gray-500">
+                          From quote simulator · see description for full range &amp; your currency
                         </p>
                       </div>
                     </div>
