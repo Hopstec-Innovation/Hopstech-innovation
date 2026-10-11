@@ -94,13 +94,26 @@ const ClientProjectDetailPage = () => {
     } finally { setUploadingFile(false); }
   };
 
+  const projectMeta =
+    project?.metadata && typeof project.metadata === "object"
+      ? (project.metadata as Record<string, unknown>)
+      : {};
+  const isCancelled =
+    Boolean(projectMeta.cancelledAt) ||
+    (project?.status === "archived" &&
+      (commercial?.project as { commercialStage?: string } | undefined)?.commercialStage ===
+        "closed");
+  const cancelReason =
+    typeof projectMeta.cancelReason === "string" ? projectMeta.cancelReason : null;
+
   const getStatusColor = (status: string) => {
+    if (isCancelled) return "bg-red-500/20 text-red-300 border-red-500/30";
     const colors = {
-      planning: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-      in_progress: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-      on_hold: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-      completed: 'bg-green-500/20 text-green-400 border-green-500/30',
-      archived: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
+      planning: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+      in_progress: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+      on_hold: "bg-orange-500/20 text-orange-400 border-orange-500/30",
+      completed: "bg-green-500/20 text-green-400 border-green-500/30",
+      archived: "bg-gray-500/20 text-gray-400 border-gray-500/30",
     };
     return colors[status as keyof typeof colors] || colors.planning;
   };
@@ -231,10 +244,16 @@ const ClientProjectDetailPage = () => {
               <div className="flex items-center gap-3 mb-2">
                 <h1 className="text-3xl font-bold text-white">{project.title}</h1>
                 <Badge className={getStatusColor(project.status)}>
-                  {project.status.replace('_', ' ')}
+                  {isCancelled ? "cancelled" : project.status.replace("_", " ")}
                 </Badge>
               </div>
               <p className="text-gray-400">{project.description}</p>
+              {isCancelled && cancelReason ? (
+                <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+                  <p className="font-medium text-red-100">Cancellation reason</p>
+                  <p className="mt-1 text-red-200/90">{cancelReason}</p>
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -263,6 +282,8 @@ const ClientProjectDetailPage = () => {
                   }
                   docs={commercial.docs}
                   events={commercial.events}
+                  isCancelled={isCancelled}
+                  cancelReason={cancelReason}
                 />
               ) : null}
 
@@ -380,7 +401,21 @@ const ClientProjectDetailPage = () => {
               <ProjectControlPanel
                 projectId={project.id}
                 currentStatus={project.status}
-                onStatusChangeRequested={() => utils.clientPortal.getProject.invalidate({ projectId: project.id })}
+                commercialStage={
+                  (commercial?.project as { commercialStage?: string } | undefined)
+                    ?.commercialStage || project.commercialStage
+                }
+                commitDate={
+                  (commercial?.project as { commitDate?: Date | null } | undefined)
+                    ?.commitDate || project.commitDate
+                }
+                quotationAcceptedAt={project.quotationAcceptedAt}
+                poReceivedAt={project.poReceivedAt}
+                createdAt={project.createdAt}
+                onStatusChangeRequested={() => {
+                  void utils.clientPortal.getProject.invalidate({ id: project.id });
+                  void utils.ops.getCommercialTimeline.invalidate({ projectId: project.id });
+                }}
               />
 
               {/* Tabs */}

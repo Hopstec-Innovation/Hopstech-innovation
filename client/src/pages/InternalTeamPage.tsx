@@ -23,12 +23,34 @@ const InternalTeamPage = () => {
   const utils = trpc.useUtils();
   const staffQuery = trpc.ops.listStaff.useQuery(undefined, { enabled: isInternalRole(user?.role), retry: false });
   const workQuery = trpc.ops.listEngagements.useQuery(undefined, { enabled: isInternalRole(user?.role), retry: false, refetchInterval: 15000 });
+  const workloadQuery = trpc.ops.getTeamWorkload.useQuery(undefined, {
+    enabled: isInternalRole(user?.role),
+    retry: false,
+    refetchInterval: 15000,
+  });
+  const claimEngagement = trpc.ops.claimEngagement.useMutation({
+    onSuccess: () => {
+      toast.success("Engagement claimed");
+      void utils.ops.getTeamWorkload.invalidate();
+      void utils.ops.listEngagements.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
+  });
   const [search, setSearch] = useState("");
   const [showProvision, setShowProvision] = useState(false);
   const [pendingRevoke, setPendingRevoke] = useState<number | null>(null);
   const directoryQuery = trpc.ops.listDirectoryUsers.useQuery(undefined, {
     enabled: isAdmin,
   });
+  const unassignedEngagements =
+    workQuery.data?.filter(
+      (p) =>
+        !p.leadAssigneeId &&
+        p.commercialStage !== "closed" &&
+        !p.isCancelled &&
+        p.status !== "archived"
+    ) || [];
+  const workloadById = new Map((workloadQuery.data || []).map((row) => [row.id, row]));
 
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -59,12 +81,51 @@ const InternalTeamPage = () => {
 
   return (
     <InternalLayout title="Team & roles">
-      <div className="ops-heading"><div><p className="ops-eyebrow">People & ownership</p><h1>The team behind delivery.</h1><p>Find engineers, review their active engagements, and manage access to the internal workspace.</p></div>{isAdmin && <button className="ops-button primary" onClick={() => setShowProvision(!showProvision)}><Users2 size={15} />{showProvision ? "Close access form" : "Add teammate"}</button>}</div>
+      <div className="ops-heading"><div><p className="ops-eyebrow">People & ownership</p><h1>The team behind delivery.</h1><p>See every teammate’s job load (engagements + claimed chats), rebalance work, and manage access.</p></div>{isAdmin && <button className="ops-button primary" onClick={() => setShowProvision(!showProvision)}><Users2 size={15} />{showProvision ? "Close access form" : "Add teammate"}</button>}</div>
       <div className="ops-panel"><div className="ops-toolbar"><label className="ops-search"><Search size={16} /><input aria-label="Search team" placeholder="Search people, roles or email…" value={search} onChange={e => setSearch(e.target.value)} /></label><span className="ops-private"><LockKeyhole size={14} />Only admins can change access</span></div></div>
       {staffQuery.isError && <div className="ops-error" role="alert">Team directory couldn’t be loaded. <button className="ops-button" onClick={() => staffQuery.refetch()}>Retry</button></div>}
 
+      {unassignedEngagements.length > 0 && (
+        <section className="ops-panel mb-6">
+          <div className="ops-panel-head">
+            <div>
+              <h2>Unassigned engagements</h2>
+              <p>Claim directly or assign a delivery lead from the engagement page.</p>
+            </div>
+          </div>
+          <div className="space-y-2 p-4 pt-0">
+            {unassignedEngagements.map((engagement) => (
+              <div
+                key={engagement.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-slate-950/50 px-4 py-3"
+              >
+                <div>
+                  <a href={`/internal/projects/${engagement.id}`} className="font-medium text-white hover:underline">
+                    {engagement.title}
+                  </a>
+                  <p className="text-xs text-slate-500">
+                    {engagement.clientName || engagement.clientEmail || "Client"} ·{" "}
+                    {engagement.commercialStage.replace("_", " ")}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="ops-button primary"
+                  disabled={claimEngagement.isPending}
+                  onClick={() => claimEngagement.mutate({ projectId: engagement.id })}
+                >
+                  Claim
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <div className="mb-8 grid gap-4 md:grid-cols-2">
-        {(staffQuery.data || []).filter(member => `${member.name} ${member.email} ${member.jobTitle}`.toLowerCase().includes(search.toLowerCase())).map((member) => (
+        {(staffQuery.data || []).filter(member => `${member.name} ${member.email} ${member.jobTitle}`.toLowerCase().includes(search.toLowerCase())).map((member) => {
+          const load = workloadById.get(member.id);
+          return (
           <Card key={member.id} className="portal-stat-card border-0 shadow-none">
             <CardHeader className="pb-2">
               <CardTitle className="text-base text-white">
@@ -76,13 +137,48 @@ const InternalTeamPage = () => {
             </CardHeader>
             <CardContent className="flex items-center justify-between gap-2 text-xs text-gray-500">
               <span>{member.email}</span>
-              <Badge className="border-white/15 bg-white/5 text-gray-300">
-                {accessRoleLabel(member.role)}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge className="border-emerald-300/20 bg-emerald-300/10 text-emerald-200">
+                  load {load?.loadScore ?? 0}
+                </Badge>
+                <Badge className="border-white/15 bg-white/5 text-gray-300">
+                  {accessRoleLabel(member.role)}
+                </Badge>
+              </div>
             </CardContent>
-            <div className="border-t border-white/10 mx-6 pb-5 pt-3"><p className="text-xs text-slate-400 mb-2">{workQuery.isError ? "Assignments unavailable" : `${workQuery.data?.filter(p => p.leadAssigneeId === member.id && p.commercialStage !== "closed").length ?? "—"} active engagements`}</p>{workQuery.data?.filter(p => p.leadAssigneeId === member.id && p.commercialStage !== "closed").map(p => <a key={p.id} href={`/internal/projects/${p.id}`} className="block text-xs text-emerald-200 py-1">{p.title} →</a>)}</div>
+            <div className="border-t border-white/10 mx-6 pb-5 pt-3 space-y-3">
+              <p className="text-xs text-slate-400">
+                {load
+                  ? `${load.engagementCount} engagements · ${load.chatCount} chats · ${load.availability || "offline"}`
+                  : workQuery.isError
+                    ? "Assignments unavailable"
+                    : "Loading job load…"}
+              </p>
+              <div>
+                <p className="mb-1 text-[11px] uppercase tracking-[0.12em] text-slate-500">Engagements</p>
+                {(load?.engagements || []).map((p) => (
+                  <a key={p.id} href={`/internal/projects/${p.id}`} className="block text-xs text-emerald-200 py-1">
+                    {p.title} →
+                  </a>
+                ))}
+                {!load?.engagements?.length && (
+                  <p className="text-xs text-slate-600">No active engagements</p>
+                )}
+              </div>
+              <div>
+                <p className="mb-1 text-[11px] uppercase tracking-[0.12em] text-slate-500">Claimed chats</p>
+                {(load?.conversations || []).map((chat) => (
+                  <a key={chat.id} href="/internal/inbox" className="block text-xs text-cyan-200 py-1">
+                    Chat #{chat.id} · {chat.status}
+                  </a>
+                ))}
+                {!load?.conversations?.length && (
+                  <p className="text-xs text-slate-600">No claimed chats</p>
+                )}
+              </div>
+            </div>
           </Card>
-        ))}
+        );})}
         {staffQuery.isLoading ? <Skeleton className="h-28 w-full" /> : null}
         {!staffQuery.isLoading && staffQuery.data?.length === 0 ? (
           <p className="text-gray-400">No staff provisioned yet.</p>

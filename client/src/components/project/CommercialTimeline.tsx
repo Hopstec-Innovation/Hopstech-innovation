@@ -12,6 +12,8 @@ type StageId =
 type CommercialTimelineProps = {
   currentStage: StageId | string;
   commitDate?: Date | string | null;
+  isCancelled?: boolean;
+  cancelReason?: string | null;
   docs?: Array<{
     id: number;
     type: string;
@@ -38,6 +40,8 @@ const STAGES: { id: StageId; label: string }[] = [
 const CommercialTimeline = ({
   currentStage,
   commitDate,
+  isCancelled = false,
+  cancelReason,
   docs = [],
   events = [],
 }: CommercialTimelineProps) => {
@@ -55,7 +59,9 @@ const CommercialTimeline = ({
           </p>
           <h3 className="mt-1 text-lg font-medium text-white">Engagement timeline</h3>
         </div>
-        {commitDate ? (
+        {isCancelled ? (
+          <Badge className="border-red-500/30 bg-red-500/10 text-red-300">Cancelled</Badge>
+        ) : commitDate ? (
           <Badge className="border-[var(--hopstec-teal)]/30 bg-[var(--hopstec-teal)]/10 text-[var(--hopstec-teal)]">
             Commit {new Date(commitDate).toLocaleDateString()}
           </Badge>
@@ -65,6 +71,12 @@ const CommercialTimeline = ({
           </Badge>
         )}
       </div>
+
+      {isCancelled && cancelReason ? (
+        <div className="mb-4 rounded-lg border border-red-500/25 bg-red-500/10 p-3 text-sm text-red-100">
+          Cancelled by client — {cancelReason}
+        </div>
+      ) : null}
 
       <ol className="mb-6 space-y-3">
         {STAGES.map((stage, index) => {

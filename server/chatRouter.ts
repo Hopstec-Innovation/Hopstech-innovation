@@ -202,18 +202,68 @@ export const chatRouter = router({
 
   claim: staffProcedure.input(z.object({ conversationId: z.number() })).mutation(async ({ input, ctx }) => {
     const db = await requireDb();
-    await db.update(chatConversations).set({ assignedTo: ctx.user.id, status: "assigned", snoozedUntil: null, updatedAt: new Date() })
-      .where(eq(chatConversations.id, input.conversationId));
-    return { success: true };
+    const [conversation] = await db
+      .select()
+      .from(chatConversations)
+      .where(eq(chatConversations.id, input.conversationId))
+      .limit(1);
+    if (!conversation) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Conversation not found" });
+    }
+    const [updated] = await db
+      .update(chatConversations)
+      .set({
+        assignedTo: ctx.user.id,
+        status: "assigned",
+        snoozedUntil: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(chatConversations.id, input.conversationId))
+      .returning();
+    return {
+      success: true,
+      conversationId: updated.id,
+      assignedTo: updated.assignedTo,
+      status: updated.status,
+    };
   }),
 
-  snooze: staffProcedure.input(z.object({ conversationId: z.number(), minutes: z.number().min(5).max(1440).default(30) })).mutation(async ({ input, ctx }) => {
-    const db = await requireDb();
-    const until = new Date(Date.now() + input.minutes * 60_000);
-    await db.update(chatConversations).set({ assignedTo: ctx.user.id, status: "snoozed", snoozedUntil: until, updatedAt: new Date() })
-      .where(eq(chatConversations.id, input.conversationId));
-    return { snoozedUntil: until };
-  }),
+  snooze: staffProcedure
+    .input(
+      z.object({
+        conversationId: z.number(),
+        minutes: z.number().min(5).max(1440).optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const db = await requireDb();
+      const minutes = input.minutes ?? 30;
+      const [conversation] = await db
+        .select()
+        .from(chatConversations)
+        .where(eq(chatConversations.id, input.conversationId))
+        .limit(1);
+      if (!conversation) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Conversation not found" });
+      }
+      const until = new Date(Date.now() + minutes * 60_000);
+      const [updated] = await db
+        .update(chatConversations)
+        .set({
+          assignedTo: ctx.user.id,
+          status: "snoozed",
+          snoozedUntil: until,
+          updatedAt: new Date(),
+        })
+        .where(eq(chatConversations.id, input.conversationId))
+        .returning();
+      return {
+        snoozedUntil: until,
+        conversationId: updated.id,
+        assignedTo: updated.assignedTo,
+        status: updated.status,
+      };
+    }),
 
   setStaffTyping: staffProcedure.input(z.object({ conversationId: z.number(), typing: z.boolean() })).mutation(async ({ input, ctx }) => {
     const db = await requireDb();
