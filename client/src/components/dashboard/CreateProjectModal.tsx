@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import { ButtonSpinner } from "../ui/loading-spinner";
 import { useAuth } from "../../hooks/useAuth";
 import {
+  DEFAULT_PROJECT_TYPE,
   fallbackRatesFromEur,
   getOffering,
   type InteractiveQuoteResult,
@@ -38,7 +39,7 @@ const CreateProjectModal = ({ open, onOpenChange }: CreateProjectModalProps) => 
   const { user } = useAuth();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [projectTypeValue, setProjectTypeValue] = useState("web-app");
+  const [projectTypeValue, setProjectTypeValue] = useState(DEFAULT_PROJECT_TYPE);
   const [currencyCode, setCurrencyCode] = useState("EUR");
   const [priority, setPriority] = useState<"low" | "medium" | "high" | "urgent">("medium");
   const [documents, setDocuments] = useState<File[]>([]);
@@ -73,7 +74,7 @@ const CreateProjectModal = ({ open, onOpenChange }: CreateProjectModalProps) => 
   const resetForm = () => {
     setTitle("");
     setDescription("");
-    setProjectTypeValue("web-app");
+    setProjectTypeValue(DEFAULT_PROJECT_TYPE);
     setCurrencyCode("EUR");
     setPriority("medium");
     setDocuments([]);

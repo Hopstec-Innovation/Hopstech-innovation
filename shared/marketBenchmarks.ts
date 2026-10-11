@@ -1,38 +1,94 @@
 /**
- * Market price bands (EUR, excl. VAT) curated from public 2025–2026 EU/UK guides.
- * Used for comparison only — not third-party quotes.
- *
- * Sources (indicative):
- * - European freelance/agency ballparks (web MVP €15–68k, web app €20–105k)
- * - EU boutique benchmarks (web MVP €12–35k; mobile €25–80k)
- * - Western EU / Paris day rates (~€480–€900 senior / day)
+ * Market price bands (EUR, excl. VAT) — mix of Africa/FR starter entry
+ * and Western EU boutique engineering. Comparison only, not third-party quotes.
  */
 
 export type MarketBand = {
   projectType: string;
   label: string;
-  /** Typical market low (freelance / lean EU) */
   lowEur: [number, number];
-  /** Mid-market Western EU boutique */
   midEur: [number, number];
-  /** High (London / US-equivalent agencies) */
   highEur: [number, number];
   notes: string;
 };
 
 export const MARKET_BENCHMARKS: MarketBand[] = [
   {
+    projectType: "landing-page",
+    label: "Landing page",
+    lowEur: [300, 1000],
+    midEur: [1000, 3000],
+    highEur: [3000, 7000],
+    notes: "Campaign landings are commonly a few hundred to a few thousand euros.",
+  },
+  {
+    projectType: "static-website",
+    label: "Static website",
+    lowEur: [600, 2000],
+    midEur: [2000, 6000],
+    highEur: [6000, 12000],
+    notes: "Brochure sites sit well below custom product pricing in EU and Africa markets.",
+  },
+  {
+    projectType: "design-mockups",
+    label: "UI mockups & visual design",
+    lowEur: [400, 1500],
+    midEur: [1500, 4500],
+    highEur: [4500, 10000],
+    notes: "Screen design packs vary widely; starter kits stay accessible.",
+  },
+  {
+    projectType: "ux-wireframes",
+    label: "UX wireframes & flows",
+    lowEur: [500, 1800],
+    midEur: [1800, 5000],
+    highEur: [5000, 12000],
+    notes: "UX discovery is often cheaper than build and prevents rework.",
+  },
+  {
+    projectType: "brand-kit",
+    label: "Brand kit",
+    lowEur: [250, 900],
+    midEur: [900, 2500],
+    highEur: [2500, 6000],
+    notes: "Identity starters are intentionally low-friction entry points.",
+  },
+  {
+    projectType: "cms-website",
+    label: "CMS website",
+    lowEur: [2000, 5000],
+    midEur: [5000, 14000],
+    highEur: [14000, 30000],
+    notes: "Editable marketing sites sit between static and full custom apps.",
+  },
+  {
+    projectType: "light-backend",
+    label: "Light backend & admin",
+    lowEur: [2000, 6000],
+    midEur: [6000, 16000],
+    highEur: [16000, 35000],
+    notes: "Small APIs/admin panels are a common step up from static sites.",
+  },
+  {
     projectType: "web-app",
     label: "Custom Web Application",
-    lowEur: [12000, 28000],
+    lowEur: [8000, 22000],
     midEur: [25000, 65000],
     highEur: [65000, 150000],
-    notes: "EU MVP/web-app guides place production web products roughly €20k–€105k.",
+    notes: "EU guides place production web products roughly €20k–€105k at mid-market.",
+  },
+  {
+    projectType: "saas-platform",
+    label: "SaaS / multi-tenant platform",
+    lowEur: [20000, 45000],
+    midEur: [45000, 120000],
+    highEur: [120000, 280000],
+    notes: "Multi-tenant SaaS with billing/roles is a different class from a demo app.",
   },
   {
     projectType: "mobile-app",
     label: "Mobile Application",
-    lowEur: [18000, 35000],
+    lowEur: [14000, 32000],
     midEur: [35000, 80000],
     highEur: [80000, 180000],
     notes: "Cross-platform apps with backend commonly €25k–€80k in EU boutiques.",
@@ -40,23 +96,23 @@ export const MARKET_BENCHMARKS: MarketBand[] = [
   {
     projectType: "devops",
     label: "DevOps & Infrastructure",
-    lowEur: [8000, 18000],
+    lowEur: [6000, 16000],
     midEur: [18000, 45000],
     highEur: [45000, 110000],
-    notes: "CI/CD and cloud ops engagements scale with environments and compliance.",
+    notes: "CI/CD and cloud ops scale with environments and compliance.",
   },
   {
     projectType: "automation",
     label: "Automation & Internal Tooling",
-    lowEur: [8000, 20000],
+    lowEur: [6000, 18000],
     midEur: [18000, 45000],
     highEur: [45000, 100000],
-    notes: "Internal tools / ERP-style automation often €8k–€25k for focused scopes.",
+    notes: "Internal tools often start focused then expand with ops complexity.",
   },
   {
     projectType: "cloud-migration",
     label: "Cloud Migration & Architecture",
-    lowEur: [12000, 30000],
+    lowEur: [10000, 28000],
     midEur: [30000, 70000],
     highEur: [70000, 160000],
     notes: "Architecture + migration programmes track environment count and risk.",
@@ -64,74 +120,74 @@ export const MARKET_BENCHMARKS: MarketBand[] = [
   {
     projectType: "healthtech",
     label: "HealthTech & Regulated Systems",
-    lowEur: [25000, 50000],
+    lowEur: [22000, 48000],
     midEur: [50000, 110000],
     highEur: [110000, 220000],
-    notes: "Regulated health data and practitioner flows command a compliance premium.",
+    notes: "Regulated health data commands a compliance premium.",
   },
   {
     projectType: "iot",
     label: "IoT & Connected Devices",
-    lowEur: [18000, 40000],
+    lowEur: [15000, 38000],
     midEur: [40000, 90000],
     highEur: [90000, 200000],
-    notes: "Firmware + cloud + dashboards expand cost non-linearly with device fleet size.",
+    notes: "Firmware + cloud expands cost non-linearly with fleet size.",
   },
   {
     projectType: "ai-integration",
     label: "AI Integration",
-    lowEur: [12000, 30000],
+    lowEur: [8000, 24000],
     midEur: [30000, 70000],
     highEur: [70000, 160000],
-    notes: "Production AI/RAG features often €15k–€45k for focused agents; larger platforms more.",
+    notes: "Production AI needs evals and cost control — not only a prompt demo.",
   },
   {
     projectType: "api",
     label: "API Development & Integrations",
-    lowEur: [6000, 15000],
-    midEur: [15000, 35000],
-    highEur: [35000, 85000],
-    notes: "Integrations and APIs are commonly €4k–€30k depending on system count.",
+    lowEur: [3500, 10000],
+    midEur: [12000, 30000],
+    highEur: [30000, 80000],
+    notes: "Integrations commonly €4k–€30k depending on system count.",
   },
   {
     projectType: "ecommerce",
     label: "E-commerce & Marketplace",
-    lowEur: [15000, 35000],
+    lowEur: [10000, 28000],
     midEur: [35000, 80000],
     highEur: [80000, 200000],
-    notes: "Marketplaces sit higher (€50k+) once payments, catalogues and multi-vendor enter scope.",
+    notes: "Marketplaces rise once payments, catalogues and multi-vendor enter scope.",
   },
   {
     projectType: "consulting",
     label: "Technical Consulting & Strategy",
-    lowEur: [2000, 6000],
-    midEur: [6000, 18000],
-    highEur: [18000, 45000],
-    notes: "Paris senior day rates ~€650–€900; short architecture reviews sit at the low end.",
+    lowEur: [800, 2500],
+    midEur: [2500, 12000],
+    highEur: [12000, 35000],
+    notes: "Short reviews stay accessible; deeper architecture programmes cost more.",
   },
   {
     projectType: "maintenance",
     label: "Maintenance & Support",
-    lowEur: [1000, 3000],
-    midEur: [3000, 9000],
-    highEur: [9000, 24000],
-    notes: "Monthly retainers vary with SLA; figures shown as typical engagement bands.",
+    lowEur: [400, 1500],
+    midEur: [1500, 6000],
+    highEur: [6000, 18000],
+    notes: "Retainers vary with SLA; figures are typical monthly engagement bands.",
   },
   {
     projectType: "other",
     label: "Other / Not sure yet",
-    lowEur: [8000, 22000],
-    midEur: [22000, 60000],
-    highEur: [60000, 140000],
-    notes: "Broad placeholder until scope is clarified in SOW / RFQ review.",
+    lowEur: [800, 4000],
+    midEur: [4000, 20000],
+    highEur: [20000, 80000],
+    notes: "Placeholder until scope is clarified in SOW / RFQ review.",
   },
 ];
 
 export const MARKET_BENCHMARK_META = {
   asOf: "2026-10",
-  region: "Western Europe / Paris boutique positioning",
+  region: "Mixed FR/Paris boutique + Africa-friendly starter ladder",
   disclaimer:
-    "Market bands are indicative aggregates from public 2025–2026 EU/UK pricing guides. They are not formal competitor quotes.",
+    "Market bands are indicative aggregates for comparison. Starter rungs are intentionally accessible; engineering rungs follow Western EU boutique reality. Not formal competitor quotes.",
 };
 
 export function getMarketBenchmark(projectType: string): MarketBand {
@@ -145,9 +201,9 @@ export function classifyVsMarket(
   midEur: number,
   band: MarketBand
 ): "below-market" | "in-market" | "premium" {
-  const midLow = (band.midEur[0] + band.midEur[1]) / 2;
+  const midCenter = (band.midEur[0] + band.midEur[1]) / 2;
   const highLow = band.highEur[0];
   if (midEur < band.midEur[0]) return "below-market";
-  if (midEur > highLow || midEur > midLow * 1.35) return "premium";
+  if (midEur > highLow || midEur > midCenter * 1.35) return "premium";
   return "in-market";
 }

@@ -1,4 +1,4 @@
--- Run in Neon SQL Editor. Creates projectTypes if missing, then seeds offerings.
+-- Run in Neon SQL Editor. Creates projectTypes if missing, then seeds the full ladder.
 -- ASCII-only. Safe to re-run.
 
 CREATE TABLE IF NOT EXISTS "projectTypes" (
@@ -21,19 +21,27 @@ INSERT INTO "projectTypes" (name, description, icon, active, "order", "createdAt
 SELECT v.name, v.description, v.icon, true, v.ord, NOW(), NOW()
 FROM (
   VALUES
-    ('Custom Web Application', 'Client portals, dashboards, and full-stack web products', 'Globe', 1),
-    ('Mobile Application', 'iOS, Android, or cross-platform consumer/business apps', 'Smartphone', 2),
-    ('DevOps & Infrastructure', 'CI/CD, containers, cloud ops, and delivery pipelines', 'Server', 3),
-    ('Automation & Internal Tooling', 'Workflows, ops dashboards, and process automation', 'Workflow', 4),
-    ('Cloud Migration & Architecture', 'AWS, GCP, Azure design, migration, and optimisation', 'Cloud', 5),
-    ('HealthTech & Regulated Systems', 'GDPR-aware health products, RPPS, clinical data flows', 'HeartPulse', 6),
-    ('IoT & Connected Devices', 'Firmware, MQTT, device fleets, and live monitoring', 'Cpu', 7),
-    ('AI Integration', 'LLM features, analysis pipelines, and recommendations', 'Brain', 8),
-    ('API Development & Integrations', 'REST/GraphQL APIs and third-party system glue', 'Code', 9),
-    ('E-commerce & Marketplace', 'Stores, payments, catalogues, and marketplace flows', 'ShoppingCart', 10),
-    ('Technical Consulting & Strategy', 'Architecture reviews, roadmap, and delivery planning', 'Lightbulb', 11),
-    ('Maintenance & Support', 'Ongoing care, upgrades, and production support', 'Wrench', 12),
-    ('Other / Not sure yet', 'Describe the problem - we will map the right engagement', 'HelpCircle', 13)
+    ('Landing page', 'One high-converting page for a launch or campaign', 'Layout', 1),
+    ('Static website', 'Multi-page brochure / company site without a heavy backend', 'Globe', 2),
+    ('UI mockups & visual design', 'High-fidelity screens and visual system', 'Palette', 3),
+    ('UX wireframes & flows', 'User journeys and interaction maps', 'PenTool', 4),
+    ('Brand kit', 'Logo, colours, type, and basic guidelines', 'Sparkles', 5),
+    ('CMS website', 'Editable marketing site', 'FileEdit', 6),
+    ('Light backend & admin', 'Simple API, database, and admin', 'Database', 7),
+    ('Custom Web Application', 'Client portals, dashboards, and full-stack web products', 'Globe', 8),
+    ('SaaS / multi-tenant platform', 'Subscriptions, roles, tenancy, billing', 'Layers', 9),
+    ('Mobile Application', 'iOS, Android, or cross-platform apps', 'Smartphone', 10),
+    ('DevOps & Infrastructure', 'CI/CD, containers, cloud ops', 'Server', 11),
+    ('Automation & Internal Tooling', 'Workflows, ops dashboards, process automation', 'Workflow', 12),
+    ('Cloud Migration & Architecture', 'AWS, GCP, Azure design and migration', 'Cloud', 13),
+    ('HealthTech & Regulated Systems', 'GDPR-aware health products and clinical data flows', 'HeartPulse', 14),
+    ('IoT & Connected Devices', 'Firmware, MQTT, device fleets', 'Cpu', 15),
+    ('AI Integration', 'LLM features and analysis pipelines', 'Brain', 16),
+    ('API Development & Integrations', 'REST/GraphQL APIs and system glue', 'Code', 17),
+    ('E-commerce & Marketplace', 'Stores, payments, catalogues', 'ShoppingCart', 18),
+    ('Technical Consulting & Strategy', 'Architecture reviews and delivery planning', 'Lightbulb', 19),
+    ('Maintenance & Support', 'Ongoing care and production support', 'Wrench', 20),
+    ('Other / Not sure yet', 'Describe the problem - we will map the right engagement', 'HelpCircle', 21)
 ) AS v(name, description, icon, ord)
 WHERE NOT EXISTS (
   SELECT 1 FROM "projectTypes" t WHERE t.name = v.name
