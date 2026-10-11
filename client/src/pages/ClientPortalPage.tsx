@@ -30,6 +30,7 @@ const emptyInquiryForm = {
   phone: '',
   projectType: DEFAULT_PROJECT_TYPE,
   budgetCurrency: 'EUR',
+  clientTargetBudget: '',
   description: '',
 };
 
@@ -88,19 +89,46 @@ const ClientPortalPage = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const simBlock = liveQuote
+      ? [
+          "",
+          "--- Live quote simulation (temporary / subject to approval) ---",
+          `Service: ${liveQuote.offering.label}`,
+          `Scope: ${liveQuote.complexityLabel} (${Math.round(liveQuote.scope)}/100)`,
+          `Timeline: ${liveQuote.timelineMonths} months (${liveQuote.timelineLabel})`,
+          `Currency: ${formData.budgetCurrency}`,
+          `Add-ons: ${
+            liveQuote.selectedAddons.length
+              ? liveQuote.selectedAddons.map((a) => a.label).join(", ")
+              : "None"
+          }`,
+          `Indicative range: ${liveQuote.budgetSummary}`,
+          formData.clientTargetBudget.trim()
+            ? `Client budget in mind: ${formData.clientTargetBudget.trim()}`
+            : null,
+          `Market: ${liveQuote.market.positionLabel}`,
+        ]
+          .filter(Boolean)
+          .join("\n")
+      : formData.clientTargetBudget.trim()
+        ? `\n\nClient budget in mind: ${formData.clientTargetBudget.trim()}`
+        : "";
+
     inquiryMutation.mutate({
       name: formData.name,
       email: formData.email,
       company: formData.company || undefined,
       phone: formData.phone || undefined,
       projectType: formData.projectType,
-      budget: liveQuote?.budgetSummary,
+      budget: formData.clientTargetBudget.trim()
+        ? `${formData.clientTargetBudget.trim()} · sim ${liveQuote?.budgetSummary ?? "n/a"}`
+        : liveQuote?.budgetSummary,
       budgetCurrency: formData.budgetCurrency,
       complexity: liveQuote?.complexity,
       timeline: liveQuote
         ? `${liveQuote.timelineMonths} months (${liveQuote.timelineLabel})`
         : undefined,
-      description: formData.description,
+      description: `${formData.description.trim()}${simBlock}`,
     });
   };
 
@@ -475,6 +503,10 @@ const ClientPortalPage = () => {
                       phone: formData.phone,
                       description: formData.description,
                     }}
+                    clientTargetBudget={formData.clientTargetBudget}
+                    onClientTargetBudgetChange={(value) =>
+                      setFormData((prev) => ({ ...prev, clientTargetBudget: value }))
+                    }
                     onProjectTypeChange={(value) =>
                       setFormData((prev) => ({ ...prev, projectType: value }))
                     }

@@ -53,25 +53,29 @@ export type EngagementSituation = {
 export const COMPLEXITY_OPTIONS: {
   value: ComplexityTier;
   label: string;
+  shortLabel: string;
   hint: string;
   scope: number;
 }[] = [
   {
     value: "lean",
-    label: "Lean MVP",
-    hint: "Focused scope, core features, shorter delivery",
+    label: "Lean (first version)",
+    shortLabel: "Lean",
+    hint: "Smallest useful delivery — core pages/features only, faster and cheaper.",
     scope: 15,
   },
   {
     value: "standard",
-    label: "Standard",
-    hint: "Full product slice with polish and integrations",
+    label: "Standard (full slice)",
+    shortLabel: "Standard",
+    hint: "Complete polished delivery for this product type — normal production quality.",
     scope: 50,
   },
   {
     value: "enterprise",
-    label: "Enterprise",
-    hint: "Multi-team, compliance, scale, or complex ops",
+    label: "Enterprise (scale / compliance)",
+    shortLabel: "Enterprise",
+    hint: "Multi-team, heavy compliance, high traffic, or complex ops — highest band.",
     scope: 85,
   },
 ];
