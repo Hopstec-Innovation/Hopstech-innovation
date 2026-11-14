@@ -57,11 +57,11 @@ export const enterpriseProducts = {
       url: "https://hopstechguardian.com",
     },
     {
-      id: "aquapulse",
-      name: "AquaPulse AP-100",
+      id: "hopstec-aqua",
+      name: "Hopstec Aqua HA-100",
       tagline: "Smart water management IoT",
       status: "Patent filed · CE docs",
-      url: "https://hopstecinnovation.com/aquapulse",
+      url: "https://hopstecinnovation.com/hopstec-aqua",
     },
   ],
 };
@@ -216,16 +216,16 @@ export const enterpriseCaseStudies = {
       ],
     },
     {
-      id: "aquapulse",
-      title: "AquaPulse AP-100: Smart Water Management",
+      id: "hopstec-aqua",
+      title: "Hopstec Aqua HA-100: Smart Water Management",
       tags: ["IoT", "Embedded Hardware", "Cloud Backend"],
       summary:
         "An ESP32-based IoT device for real-time water flow monitoring, with MQTT cloud integration and a live facility dashboard.",
       techStack: "ESP32, Django, HiveMQ MQTT, Railway",
       deployment: "hopstecinnovation.com",
-      url: "https://hopstecinnovation.com/aquapulse",
+      url: "https://hopstecinnovation.com/hopstec-aqua",
       image: "/showcase/AquaDashboard.png",
-      imageAlt: "AquaPulse smart water management dashboard",
+      imageAlt: "Hopstec Aqua smart water management dashboard",
       details: [
         {
           heading: "The Problem",
@@ -233,7 +233,7 @@ export const enterpriseCaseStudies = {
         },
         {
           heading: "The Solution",
-          body: "AquaPulse AP-100 is an ESP32-based IoT device designed and built under Hopstec Innovation to monitor water flow in real time. The device communicates over MQTT via HiveMQ, feeding data to a Django backend hosted on Railway. A real-time dashboard gives facility managers live consumption data, historical trends, and anomaly alerts.",
+          body: "Hopstec Aqua HA-100 is an ESP32-based IoT device designed and built under Hopstec Innovation to monitor water flow in real time. The device communicates over MQTT via HiveMQ, feeding data to a Django backend hosted on Railway. A real-time dashboard gives facility managers live consumption data, historical trends, and anomaly alerts.",
         },
         {
           heading: "Additional Work",
@@ -554,7 +554,7 @@ export const enterpriseFooter = {
     { label: "Case studies", href: "/#case-studies" },
     { label: "20Hecto", href: "https://app.20hecto.com", external: true },
     { label: "Hopstec Guardian", href: "https://hopstechguardian.com", external: true },
-    { label: "AquaPulse", href: "/aquapulse" },
+    { label: "Hopstec Aqua", href: "/hopstec-aqua" },
   ],
   clientLinks: [
     { label: "Client portal", href: "/client-portal" },

@@ -87,10 +87,10 @@ The Talaria Dashboard has transformed semiconductor manufacturing logistics oper
         publishedAt: new Date("2024-01-15")
       },
       {
-        title: "AquaPulse SmartWater",
-        slug: "aquapulse-smartwater",
+        title: "Hopstec Aqua",
+        slug: "hopstec-aqua",
         description: "Smart water control system that detects leaks in real time and automatically shuts off your water",
-        longDescription: `AquaPulse is a smart water control system that detects leaks in real time and automatically shuts off your water. Protect your home. Save money. Gain peace of mind.
+        longDescription: `Hopstec Aqua is a smart water control system that detects leaks in real time and automatically shuts off your water. Protect your home. Save money. Gain peace of mind.
 
 **The Problem**
 
@@ -98,11 +98,11 @@ Water damage is one of the most expensive and underestimated risks in homes. Lea
 
 **The Solution**
 
-AquaPulse gives you full control over your water usage. It monitors your water flow in real time, detects abnormal behavior, and reacts instantly. In case of a leak, AquaPulse can automatically shut off your water before damage happens.
+Hopstec Aqua gives you full control over your water usage. It monitors your water flow in real time, detects abnormal behavior, and reacts instantly. In case of a leak, Hopstec Aqua can automatically shut off your water before damage happens.
 
 **How It Works**
 
-1. Install AquaPulse on your water system
+1. Install Hopstec Aqua on your water system
 2. Connect to the web dashboard
 3. Monitor, receive alerts, and control your water anytime
 
@@ -119,7 +119,7 @@ Simple. Intelligent. Autonomous.
 
 **The Story**
 
-AquaPulse was inspired by real-world water scarcity. During a severe drought in Cape Town, strict water restrictions revealed how inefficient and unmanaged water usage can be. This experience led to the creation of AquaPulse, a smarter way to manage water at home.`,
+Hopstec Aqua was inspired by real-world water scarcity. During a severe drought in Cape Town, strict water restrictions revealed how inefficient and unmanaged water usage can be. This experience led to the creation of Hopstec Aqua, a smarter way to manage water at home.`,
         thumbnail: "/showcase/AquaDashboard.png",
         images: [
           "/showcase/AquaDashboard.png",

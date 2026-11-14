@@ -51,8 +51,8 @@ const presentation: Record<string, ProjectPresentation> = {
     outcome: "Traceable investigations with persistent context",
     category: "Digital products",
   },
-  aquapulse: {
-    name: "AquaPulse AP-100",
+  "hopstec-aqua": {
+    name: "Hopstec Aqua HA-100",
     discipline: "Connected hardware · IoT",
     headline: "Every drop.\nIn the picture.",
     description:
@@ -83,7 +83,7 @@ const presentation: Record<string, ProjectPresentation> = {
 const projectOrder = [
   "20hecto",
   "guardian",
-  "aquapulse",
+  "hopstec-aqua",
   "talaria",
   "prestige",
 ];
@@ -282,12 +282,12 @@ function ProjectVisual({ study }: { study: EnterpriseCaseStudy }) {
   if (study.id === "20hecto") return <HealthVisual />;
   if (study.id === "guardian") return <GuardianVisual />;
   if (study.id === "prestige") return <PrestigeVisual />;
-  if (study.id === "aquapulse")
+  if (study.id === "hopstec-aqua")
     return (
       <div className="work-aqua-art">
         <div className="work-art-topline">
           <span>
-            <Droplets size={17} /> AQUAPULSE
+            <Droplets size={17} /> HOPSTEC AQUA
           </span>
           <span>AP–100</span>
         </div>

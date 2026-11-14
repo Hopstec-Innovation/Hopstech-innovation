@@ -16,7 +16,7 @@ const ContactPage = lazy(() => import("./pages/ContactPage"));
 const CareersPage = lazy(() => import("./pages/CareersPage"));
 const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
 const TermsPage = lazy(() => import("./pages/TermsPage"));
-const AquaPulsePage = lazy(() => import("./pages/AquaPulsePage"));
+const HopstecAquaPage = lazy(() => import("./pages/HopstecAquaPage"));
 const ClientPortalPage = lazy(() => import("./pages/ClientPortalPage"));
 const AuthVerifyPage = lazy(() => import("./pages/AuthVerifyPage"));
 const ProjectsPage = lazy(() => import("./pages/ProjectsPage"));
@@ -60,7 +60,7 @@ function Router() {
   return (
     <Switch>
       <Route path={"/"}>{() => <HomePage />}</Route>
-      <Route path={"/aquapulse"}>{() => <AquaPulsePage />}</Route>
+      <Route path={"/hopstec-aqua"}>{() => <HopstecAquaPage />}</Route>
       <Route path={"/portfolio"}>{() => <Redirect to="/" />}</Route>
       <Route path={"/portfolio/:slug"}>{() => <Redirect to="/" />}</Route>
       <Route path={"/contact"}>{() => <ContactPage />}</Route>

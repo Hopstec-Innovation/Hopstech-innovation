@@ -143,7 +143,7 @@
 .work-project-guardian {
   --project-accent: #c7bbf4;
 }
-.work-project-aquapulse {
+.work-project-hopstec-aqua {
   --project-accent: #8bdce8;
 }
 .work-project-talaria {
@@ -652,7 +652,7 @@
   width: 100%;
   height: auto;
 }
-.work-project-aquapulse:hover .work-aqua-phone {
+.work-project-hopstec-aqua:hover .work-aqua-phone {
   transform: rotate(2deg) translateY(-5px);
 }
 .work-browser-art {
