@@ -34,9 +34,9 @@ const plans = [
     price: "EUR89",
     note: "Device pre-order",
     eyebrow: "For single-home protection",
-    description: "Best for early customers who want the AquaPulse device reserved first.",
+    description: "Best for early customers who want the Hopstec Aqua device reserved first.",
     features: [
-      "1 AquaPulse AP-100 device",
+      "1 Hopstec Aqua HA-100 device",
       "Leak detection and auto shutoff",
       "Mobile app access",
       "Installation guidance",
@@ -106,7 +106,7 @@ const highlightCards = [
   },
   {
     title: "Ready for homes and properties",
-    description: "From one apartment to multi-unit rollout, AquaPulse scales with the need.",
+    description: "From one apartment to multi-unit rollout, Hopstec Aqua scales with the need.",
     icon: Home,
   },
 ];
@@ -114,7 +114,7 @@ const highlightCards = [
 const steps = [
   {
     title: "Install on the water line",
-    description: "AquaPulse connects to the incoming supply and starts reading flow immediately.",
+    description: "Hopstec Aqua connects to the incoming supply and starts reading flow immediately.",
     icon: Wrench,
   },
   {
@@ -124,7 +124,7 @@ const steps = [
   },
   {
     title: "Alert and act",
-    description: "Customers receive notifications, and AquaPulse can shut off water automatically when needed.",
+    description: "Customers receive notifications, and Hopstec Aqua can shut off water automatically when needed.",
     icon: Bell,
   },
 ];
@@ -142,7 +142,7 @@ const appStoreBadges = [
   {
     id: "apple",
     name: "App Store",
-    href: import.meta.env.VITE_AQUAPULSE_APP_STORE_URL || "",
+    href: import.meta.env.VITE_HOPSTEC_AQUA_APP_STORE_URL || "",
     status: "Coming soon for iPhone and iPad",
     imageSrc: "https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg",
     imageAlt: "Download on the App Store",
@@ -150,7 +150,7 @@ const appStoreBadges = [
   {
     id: "google",
     name: "Google Play",
-    href: import.meta.env.VITE_AQUAPULSE_GOOGLE_PLAY_URL || "",
+    href: import.meta.env.VITE_HOPSTEC_AQUA_GOOGLE_PLAY_URL || "",
     status: "Coming soon for Android",
     imageSrc: "https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png",
     imageAlt: "Get it on Google Play",
@@ -162,7 +162,7 @@ const fadeUp = {
   visible: { opacity: 1, y: 0 },
 };
 
-const AquaPulsePage = () => {
+const HopstecAquaPage = () => {
   const [selectedPlan, setSelectedPlan] = useState<(typeof plans)[number]["id"]>("connected");
   const [previewImage, setPreviewImage] = useState<{ src: string; alt: string } | null>(null);
   const [formData, setFormData] = useState({
@@ -179,7 +179,7 @@ const AquaPulsePage = () => {
 
   const contactMutation = trpc.contact.submit.useMutation({
     onSuccess: () => {
-      toast.success("AquaPulse order request sent successfully.");
+      toast.success("Hopstec Aqua order request sent successfully.");
       setFormData({
         name: "",
         email: "",
@@ -223,7 +223,7 @@ const AquaPulsePage = () => {
       email: formData.email,
       phone: formData.phone,
       company: formData.company,
-      subject: `AquaPulse order request - ${activePlan.name}`,
+      subject: `Hopstec Aqua order request - ${activePlan.name}`,
       message: [
         `Selected plan: ${activePlan.name}`,
         `Requested quantity: ${safeQuantity}`,
@@ -254,7 +254,7 @@ const AquaPulsePage = () => {
               transition={{ duration: 0.7, ease: "easeOut" }}
             >
               <Badge className="mb-5 border-cyan-400/30 bg-cyan-500/10 px-3 py-1 text-cyan-200 sm:px-4">
-                AquaPulse AP-100 | Smart water protection
+                Hopstec Aqua HA-100 | Smart water protection
               </Badge>
               <motion.h1
                 className="max-w-3xl bg-gradient-to-r from-white via-cyan-100 to-sky-300 bg-clip-text text-4xl font-black tracking-tight text-transparent sm:text-5xl md:text-6xl"
@@ -268,7 +268,7 @@ const AquaPulsePage = () => {
                 variants={fadeUp}
                 transition={{ delay: 0.2, duration: 0.7 }}
               >
-                AquaPulse helps homeowners and property teams detect leaks early, stay informed in real time, and move forward with confidence before small issues become expensive damage.
+                Hopstec Aqua helps homeowners and property teams detect leaks early, stay informed in real time, and move forward with confidence before small issues become expensive damage.
               </motion.p>
 
               <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
@@ -348,14 +348,14 @@ const AquaPulsePage = () => {
                       onClick={() =>
                         setPreviewImage({
                           src: "/showcase/AquaDevices.png",
-                          alt: "AquaPulse device dashboard preview",
+                          alt: "Hopstec Aqua device dashboard preview",
                         })
                       }
                       className="group relative block w-full"
                     >
                       <ResponsiveShowcaseImage
                         src="/showcase/AquaDevices.png"
-                        alt="AquaPulse device dashboard preview"
+                        alt="Hopstec Aqua device dashboard preview"
                         className="h-full w-full rounded-xl object-cover"
                         sizes="(max-width: 640px) 92vw, (max-width: 1200px) 40vw, 560px"
                         fetchPriority="high"
@@ -376,14 +376,14 @@ const AquaPulsePage = () => {
                         onClick={() =>
                           setPreviewImage({
                             src: "/showcase/AquaDashboard.png",
-                            alt: "AquaPulse dashboard",
+                            alt: "Hopstec Aqua dashboard",
                           })
                         }
                         className="group relative block w-full"
                       >
                         <ResponsiveShowcaseImage
                           src="/showcase/AquaDashboard.png"
-                          alt="AquaPulse dashboard"
+                          alt="Hopstec Aqua dashboard"
                           className="h-full w-full rounded-xl object-cover"
                           sizes="(max-width: 640px) 92vw, (max-width: 1200px) 20vw, 280px"
                           loading="lazy"
@@ -403,14 +403,14 @@ const AquaPulsePage = () => {
                         onClick={() =>
                           setPreviewImage({
                             src: "/showcase/AquaMenu.png",
-                            alt: "AquaPulse mobile menu",
+                            alt: "Hopstec Aqua mobile menu",
                           })
                         }
                         className="group relative block w-full"
                       >
                         <ResponsiveShowcaseImage
                           src="/showcase/AquaMenu.png"
-                          alt="AquaPulse mobile menu"
+                          alt="Hopstec Aqua mobile menu"
                           className="h-full w-full rounded-xl object-cover"
                           sizes="(max-width: 640px) 92vw, (max-width: 1200px) 20vw, 280px"
                           loading="lazy"
@@ -432,7 +432,7 @@ const AquaPulsePage = () => {
         <DialogContent className="max-w-[96vw] border-slate-800 bg-slate-950 p-3 sm:p-5 text-white">
           <div className="flex items-center justify-between gap-3 px-1 pb-2">
             <div>
-              <p className="text-sm font-semibold text-white">AquaPulse preview</p>
+              <p className="text-sm font-semibold text-white">Hopstec Aqua preview</p>
               <p className="text-xs text-slate-400">Expanded mobile-friendly view</p>
             </div>
             <Expand className="h-4 w-4 text-slate-400" />
@@ -459,10 +459,10 @@ const AquaPulsePage = () => {
             variants={fadeUp}
             transition={{ duration: 0.6 }}
           >
-            <Badge className="border-cyan-400/30 bg-cyan-500/10 text-cyan-200">Why AquaPulse</Badge>
+            <Badge className="border-cyan-400/30 bg-cyan-500/10 text-cyan-200">Why Hopstec Aqua</Badge>
             <h2 className="mt-4 bg-gradient-to-r from-cyan-100 via-white to-sky-300 bg-clip-text text-3xl font-bold text-transparent md:text-4xl">A reassuring experience from first visit to first install.</h2>
             <p className="mt-4 text-lg text-slate-400">
-              AquaPulse is presented as a calm, premium way to protect homes, reduce water waste, and make installation feel straightforward from the start.
+              Hopstec Aqua is presented as a calm, premium way to protect homes, reduce water waste, and make installation feel straightforward from the start.
             </p>
           </motion.div>
 
@@ -546,10 +546,10 @@ const AquaPulsePage = () => {
         <div className="container mx-auto px-4">
           <div className="grid gap-6 rounded-[2rem] border border-cyan-500/20 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.12),transparent_45%),linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,6,23,0.98))] p-5 sm:gap-8 sm:p-8 shadow-2xl shadow-cyan-950/20 lg:grid-cols-[1fr_auto] lg:items-center">
             <div className="max-w-2xl">
-              <Badge className="border-cyan-400/30 bg-cyan-500/10 text-cyan-200">AquaPulse App</Badge>
-              <h2 className="mt-4 bg-gradient-to-r from-white via-cyan-100 to-cyan-300 bg-clip-text text-3xl font-bold text-transparent md:text-4xl">The AquaPulse app is on the way.</h2>
+              <Badge className="border-cyan-400/30 bg-cyan-500/10 text-cyan-200">Hopstec Aqua App</Badge>
+              <h2 className="mt-4 bg-gradient-to-r from-white via-cyan-100 to-cyan-300 bg-clip-text text-3xl font-bold text-transparent md:text-4xl">The Hopstec Aqua app is on the way.</h2>
               <p className="mt-4 text-lg leading-8 text-slate-400">
-                The AquaPulse mobile experience is being prepared for release. Once available, customers will be able to download the app from the App Store and Google Play to activate devices, monitor status, and manage alerts.
+                The Hopstec Aqua mobile experience is being prepared for release. Once available, customers will be able to download the app from the App Store and Google Play to activate devices, monitor status, and manage alerts.
               </p>
             </div>
 
@@ -840,7 +840,7 @@ const AquaPulsePage = () => {
                     className="w-full bg-cyan-400 text-slate-950 hover:bg-cyan-300"
                     disabled={contactMutation.isPending}
                   >
-                    {contactMutation.isPending ? "Sending order request..." : "Send AquaPulse Order Request"}
+                    {contactMutation.isPending ? "Sending order request..." : "Send Hopstec Aqua Order Request"}
                     <ArrowRight className="h-4 w-4" />
                   </Button>
 
@@ -861,4 +861,4 @@ const AquaPulsePage = () => {
   );
 };
 
-export default AquaPulsePage;
+export default HopstecAquaPage;
